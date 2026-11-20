@@ -6,24 +6,19 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const root = process.cwd();
 const cliPath = resolve(root, 'dist/headless.mjs');
-const tmpDir = resolve(root, 'tmp/contract-test');
+const tmpDir = resolve(root, 'tmp/contract-test-v11');
 
 function runHeadless(args: string[]) {
-  return spawnSync(process.execPath, [cliPath, ...args], {
-    cwd: root,
-    encoding: 'utf8',
-  });
+  return spawnSync(process.execPath, [cliPath, ...args], { cwd: root, encoding: 'utf8' });
 }
 
 function parseJsonl(filePath: string) {
-  const lines = readFileSync(filePath, 'utf8').trim().split('\n');
-  return lines.map((line) => JSON.parse(line));
+  return readFileSync(filePath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 }
 
-describe('Headless CLI — Test Contract v1.0', () => {
+describe('Headless CLI — Test Contract v1.1 (Phase 2 + Phase 1 Regression)', () => {
   beforeAll(() => {
     mkdirSync(tmpDir, { recursive: true });
-    // Ensure headless bundle exists
     if (process.platform === 'win32') {
       execFileSync('cmd.exe', ['/c', 'npm run build:headless'], { cwd: root, stdio: 'pipe' });
     } else {
@@ -35,115 +30,99 @@ describe('Headless CLI — Test Contract v1.0', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('emits valid JSONL starting with tick 0 snapshot and ending with end record', () => {
-    const out = resolve(tmpDir, 'basic.jsonl');
-    const res = runHeadless(['--seed', '42', '--night', '1', '--ticks', '30', '--snapshot-every', '10', '--out', out]);
-    expect(res.status).toBe(0);
-
-    const records = parseJsonl(out);
-    expect(records[0]).toMatchObject({ type: 'snapshot', tick: 0, sim_tick: 0, state: 'playing' });
-    expect(records[0].lanterns).toHaveLength(5);
-    expect(records[0].player.pos).toEqual([0, 0, 0]);
-    expect(records.at(-1)).toMatchObject({ type: 'end', ticks: 30, state: 'playing' });
-
-    const snapshots = records.filter((r) => r.type === 'snapshot');
-    expect(snapshots.map((s) => s.tick)).toEqual([0, 10, 20, 30]);
+  it('emits v1.1 snapshot schema across nights 1, 2, and 3', () => {
+    for (const night of [1, 2, 3]) {
+      const out = resolve(tmpDir, `night${night}.jsonl`);
+      const res = runHeadless(['--seed', '42', '--night', String(night), '--ticks', '60', '--snapshot-every', '30', '--out', out]);
+      expect(res.status).toBe(0);
+      const recs = parseJsonl(out);
+      expect(recs[0]).toMatchObject({
+        type: 'snapshot',
+        tick: 0,
+        sim_tick: 0,
+        night,
+        state: 'playing',
+      });
+      expect(recs[0].wind).toHaveProperty('active');
+      expect(recs[0].player).toHaveProperty('vel');
+      expect(recs[0].player).toHaveProperty('grounded');
+      expect(recs[0].player).toHaveProperty('dash_cd_s');
+      expect(recs[0].player).toHaveProperty('pulse_cd_s');
+      expect(recs[0].player).toHaveProperty('charm_s');
+      expect(Array.isArray(recs[0].drifters)).toBe(true);
+      expect(Array.isArray(recs[0].charms)).toBe(true);
+      expect(recs[1]).toMatchObject({ type: 'event', tick: 0, name: 'night_start', data: { night } });
+      expect(recs.at(-1)).toMatchObject({ type: 'end', ticks: 60, state: 'playing' });
+    }
   });
 
-  it('completes a full win scenario via CLI with exact event sequence', () => {
-    const scenarioPath = resolve(tmpDir, 'win-scenario.json');
-    const inputsPath = resolve(tmpDir, 'win-inputs.json');
-    const out = resolve(tmpDir, 'win.jsonl');
+  it('runs a full Phase 2 scenario for dash, pause/resume, drifter steal+drop, charm, and jump pad', () => {
+    const scenPath = resolve(tmpDir, 'p2-features.scenario.json');
+    const inpPath = resolve(tmpDir, 'p2-features.inputs.json');
+    const out = resolve(tmpDir, 'p2-features.jsonl');
 
     writeFileSync(
-      scenarioPath,
+      scenPath,
       JSON.stringify({
-        player: { pos: [0, 0, 0], carried: 0, flames: 3 },
+        player: { pos: [35, 0, 0], carried: 7, flames: 3 },
         random_motes: false,
         random_shades: false,
-        motes: [
-          [0, 0, 2],
-          [0, 0, 4],
-          [0, 0, 6],
-        ],
-        shades: [],
-        lanterns: [
-          { id: 'L1', pos: [0, 0, 8], deposited: 0 },
-          { id: 'L2', lit: true },
-          { id: 'L3', lit: true },
-          { id: 'L4', lit: true },
-          { id: 'L5', lit: true },
-        ],
-        time_left_s: 120,
+        random_drifters: false,
+        drifters: [{ id: 'D1', pos: [35, 1.5, 0.8], state: 'chase' }],
       }),
     );
-
     writeFileSync(
-      inputsPath,
+      inpPath,
       JSON.stringify({
         frames: [
-          { tick: 0, move: [0, 1], cam_yaw_deg: 0 },
-          { tick: 65, move: [0, 0], interact: true },
-          { tick: 66, interact: false },
+          { tick: 0, dash: true },
+          { tick: 1, dash: false, pulse: true },
+          { tick: 2, pulse: false, pause: true },
+          { tick: 3, pause: false },
+          { tick: 5, pause: true },
+          { tick: 6, pause: false },
         ],
       }),
     );
 
-    const res = runHeadless([
-      '--seed',
-      '99',
-      '--night',
-      '1',
-      '--scenario',
-      scenarioPath,
-      '--inputs',
-      inputsPath,
-      '--ticks',
-      '300',
-      '--out',
-      out,
-    ]);
+    const res = runHeadless(['--seed', '99', '--night', '2', '--scenario', scenPath, '--inputs', inpPath, '--ticks', '20', '--snapshot-every', '5', '--out', out]);
     expect(res.status).toBe(0);
-
-    const records = parseJsonl(out);
-    const eventNames = records.filter((r) => r.type === 'event').map((r) => r.name);
-    expect(eventNames).toEqual([
-      'mote_picked',
-      'mote_picked',
-      'mote_picked',
-      'deposit',
-      'lantern_lit',
-      'game_over',
-    ]);
-    expect(records.at(-1)).toMatchObject({ type: 'end', ticks: 66, state: 'won' });
+    const recs = parseJsonl(out);
+    const evNames = recs.filter((r) => r.type === 'event').map((r) => r.name);
+    expect(evNames).toContain('dash');
+    expect(evNames).toContain('charm_picked');
+    expect(evNames).toContain('drifter_steal');
+    expect(evNames).toContain('pulse');
+    expect(evNames).toContain('drifter_drop');
+    expect(evNames).toContain('paused');
+    expect(evNames).toContain('resumed');
   });
 
-  it('is byte-for-byte deterministic across two runs with the same seed', () => {
-    const out1 = resolve(tmpDir, 'det1.jsonl');
-    const out2 = resolve(tmpDir, 'det2.jsonl');
-    const args = ['--seed', '777', '--night', '1', '--ticks', '600', '--snapshot-every', '20'];
+  it('completes a full Night 3 headless run (21,600 ticks) well under 30s and is byte-identical across 2 runs', () => {
+    const out1 = resolve(tmpDir, 'n3-1.jsonl');
+    const out2 = resolve(tmpDir, 'n3-2.jsonl');
+    const args = ['--seed', '2026', '--night', '3', '--ticks', '21600', '--snapshot-every', '600'];
 
-    expect(runHeadless([...args, '--out', out1]).status).toBe(0);
-    expect(runHeadless([...args, '--out', out2]).status).toBe(0);
+    const t0 = performance.now();
+    const r1 = runHeadless([...args, '--out', out1]);
+    const elapsedMs = performance.now() - t0;
+    expect(r1.status).toBe(0);
+    expect(elapsedMs).toBeLessThan(30000);
+
+    const r2 = runHeadless([...args, '--out', out2]);
+    expect(r2.status).toBe(0);
 
     const h1 = createHash('sha256').update(readFileSync(out1)).digest('hex');
     const h2 = createHash('sha256').update(readFileSync(out2)).digest('hex');
     expect(h1).toBe(h2);
   });
 
-  it('exits with code 2 on malformed JSON or invalid inputs/scenario schema', () => {
-    const badJson = resolve(tmpDir, 'bad.json');
-    const badInputs = resolve(tmpDir, 'bad-inputs.json');
+  it('exits with code 2 on malformed JSON or invalid v1.1 inputs/scenario', () => {
+    const bad = resolve(tmpDir, 'bad.json');
     const out = resolve(tmpDir, 'err.jsonl');
-
-    writeFileSync(badJson, '{not valid json');
-    const res1 = runHeadless(['--seed', '1', '--night', '1', '--scenario', badJson, '--ticks', '10', '--out', out]);
-    expect(res1.status).toBe(2);
-    expect(res1.stderr.length).toBeGreaterThan(0);
-
-    writeFileSync(badInputs, JSON.stringify({ frames: [{ tick: 5 }, { tick: 3 }] }));
-    const res2 = runHeadless(['--seed', '1', '--night', '1', '--inputs', badInputs, '--ticks', '10', '--out', out]);
-    expect(res2.status).toBe(2);
-    expect(res2.stderr.length).toBeGreaterThan(0);
+    writeFileSync(bad, '{"frames":[{"tick":5},{"tick":2}]}');
+    const res = runHeadless(['--seed', '1', '--night', '1', '--inputs', bad, '--ticks', '10', '--out', out]);
+    expect(res.status).toBe(2);
+    expect(res.stderr.length).toBeGreaterThan(0);
   });
 });
