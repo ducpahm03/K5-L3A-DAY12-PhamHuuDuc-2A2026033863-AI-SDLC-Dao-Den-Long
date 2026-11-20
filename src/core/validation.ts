@@ -3,6 +3,7 @@ import type {
   InputFrame,
   InputsFile,
   MoteKind,
+  ScenarioLantern,
   ScenarioSpec,
   ShadeState,
   Vec3,
@@ -15,7 +16,7 @@ export class ValidationError extends Error {
   }
 }
 
-const VALID_SHADE_STATES = new Set<ShadeState>(['spawning', 'wander', 'chase', 'recoil', 'stunned']);
+const VALID_SHADE_STATES = new Set<ShadeState>(['spawning', 'wander', 'chase', 'recoil', 'stunned', 'drain']);
 const VALID_DRIFTER_STATES = new Set<Exclude<DrifterState, 'removed'>>(['idle', 'chase', 'flee']);
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -41,26 +42,18 @@ function assertNonNegInt(v: unknown, label: string): number {
 }
 
 export function validateInputsFile(raw: unknown): InputsFile {
-  if (!isPlainObject(raw)) {
-    throw new ValidationError('inputs must be a JSON object');
-  }
-  if (!Array.isArray(raw.frames)) {
-    throw new ValidationError('inputs.frames must be an array');
-  }
+  if (!isPlainObject(raw)) throw new ValidationError('inputs must be a JSON object');
+  if (!Array.isArray(raw.frames)) throw new ValidationError('inputs.frames must be an array');
 
   let prevTick = -1;
   const frames: InputFrame[] = [];
 
   for (let i = 0; i < raw.frames.length; i++) {
     const f = raw.frames[i];
-    if (!isPlainObject(f)) {
-      throw new ValidationError(`inputs.frames[${i}] must be an object`);
-    }
+    if (!isPlainObject(f)) throw new ValidationError(`inputs.frames[${i}] must be an object`);
     const tick = assertNonNegInt(f.tick, `inputs.frames[${i}].tick`);
     if (tick <= prevTick) {
-      throw new ValidationError(
-        `inputs.frames[${i}].tick (${tick}) must be strictly greater than previous tick (${prevTick})`,
-      );
+      throw new ValidationError(`inputs.frames[${i}].tick (${tick}) must be strictly greater than previous tick (${prevTick})`);
     }
     prevTick = tick;
 
@@ -77,17 +70,13 @@ export function validateInputsFile(raw: unknown): InputsFile {
     }
 
     if (f.cam_yaw_deg !== undefined) {
-      if (!isFiniteNumber(f.cam_yaw_deg)) {
-        throw new ValidationError(`inputs.frames[${i}].cam_yaw_deg must be a finite number`);
-      }
+      if (!isFiniteNumber(f.cam_yaw_deg)) throw new ValidationError(`inputs.frames[${i}].cam_yaw_deg must be finite`);
       frame.cam_yaw_deg = f.cam_yaw_deg;
     }
 
     for (const key of ['jump', 'interact', 'pulse', 'dash', 'pause'] as const) {
       if (f[key] !== undefined) {
-        if (typeof f[key] !== 'boolean') {
-          throw new ValidationError(`inputs.frames[${i}].${key} must be a boolean`);
-        }
+        if (typeof f[key] !== 'boolean') throw new ValidationError(`inputs.frames[${i}].${key} must be a boolean`);
         frame[key] = f[key] as boolean;
       }
     }
@@ -99,10 +88,7 @@ export function validateInputsFile(raw: unknown): InputsFile {
 }
 
 export function validateScenarioSpec(raw: unknown, validLanternIds: ReadonlySet<string>): ScenarioSpec {
-  if (!isPlainObject(raw)) {
-    throw new ValidationError('scenario must be a JSON object');
-  }
-
+  if (!isPlainObject(raw)) throw new ValidationError('scenario must be a JSON object');
   const spec: ScenarioSpec = {};
 
   if (raw.player !== undefined) {
@@ -111,7 +97,7 @@ export function validateScenarioSpec(raw: unknown, validLanternIds: ReadonlySet<
     if (raw.player.pos !== undefined) spec.player.pos = assertVec3(raw.player.pos, 'scenario.player.pos');
     if (raw.player.carried !== undefined) spec.player.carried = assertNonNegInt(raw.player.carried, 'scenario.player.carried');
     if (raw.player.flames !== undefined) spec.player.flames = assertNonNegInt(raw.player.flames, 'scenario.player.flames');
-    for (const k of ['invuln_ticks', 'dash_cd_ticks', 'pulse_cd_ticks', 'charm_ticks'] as const) {
+    for (const k of ['invuln_ticks', 'dash_cd_ticks', 'pulse_cd_ticks', 'charm_ticks', 'successful_lights'] as const) {
       if (raw.player[k] !== undefined) spec.player[k] = assertNonNegInt(raw.player[k], `scenario.player.${k}`);
     }
   }
@@ -152,7 +138,10 @@ export function validateScenarioSpec(raw: unknown, validLanternIds: ReadonlySet<
       const pos = assertVec3(item.pos, `scenario.shades[${i}].pos`);
       if (item.id !== undefined && typeof item.id !== 'string') throw new ValidationError(`scenario.shades[${i}].id must be string`);
       if (item.state !== undefined && !VALID_SHADE_STATES.has(item.state as ShadeState)) {
-        throw new ValidationError(`scenario.shades[${i}].state must be spawning | wander | chase | recoil | stunned`);
+        throw new ValidationError(`scenario.shades[${i}].state is invalid`);
+      }
+      if (item.target_lantern_id !== undefined && typeof item.target_lantern_id !== 'string') {
+        throw new ValidationError(`scenario.shades[${i}].target_lantern_id must be string`);
       }
       const stl = item.state_ticks_left !== undefined ? assertNonNegInt(item.state_ticks_left, `scenario.shades[${i}].state_ticks_left`) : undefined;
       return {
@@ -160,6 +149,7 @@ export function validateScenarioSpec(raw: unknown, validLanternIds: ReadonlySet<
         pos,
         ...(item.state !== undefined ? { state: item.state as ShadeState } : {}),
         ...(stl !== undefined ? { state_ticks_left: stl } : {}),
+        ...(item.target_lantern_id !== undefined ? { target_lantern_id: item.target_lantern_id } : {}),
       };
     });
   }
@@ -209,12 +199,22 @@ export function validateScenarioSpec(raw: unknown, validLanternIds: ReadonlySet<
     spec.lanterns = raw.lanterns.map((item, i) => {
       if (!isPlainObject(item) || typeof item.id !== 'string') throw new ValidationError(`scenario.lanterns[${i}] must have string id`);
       if (!validLanternIds.has(item.id)) throw new ValidationError(`scenario.lanterns[${i}].id (${item.id}) is invalid`);
-      const out: { id: string; pos?: Vec3; deposited?: number; lit?: boolean } = { id: item.id };
+      const out: ScenarioLantern = { id: item.id };
       if (item.pos !== undefined) out.pos = assertVec3(item.pos, `scenario.lanterns[${i}].pos`);
       if (item.deposited !== undefined) out.deposited = assertNonNegInt(item.deposited, `scenario.lanterns[${i}].deposited`);
       if (item.lit !== undefined) {
         if (typeof item.lit !== 'boolean') throw new ValidationError(`scenario.lanterns[${i}].lit must be boolean`);
         out.lit = item.lit;
+      }
+      if (item.fuel !== undefined) {
+        if (!isFiniteNumber(item.fuel) || item.fuel < 0 || item.fuel > 100) {
+          throw new ValidationError(`scenario.lanterns[${i}].fuel must be in [0, 100]`);
+        }
+        out.fuel = item.fuel;
+      }
+      if (item.ever_lit !== undefined) {
+        if (typeof item.ever_lit !== 'boolean') throw new ValidationError(`scenario.lanterns[${i}].ever_lit must be boolean`);
+        out.ever_lit = item.ever_lit;
       }
       return out;
     });

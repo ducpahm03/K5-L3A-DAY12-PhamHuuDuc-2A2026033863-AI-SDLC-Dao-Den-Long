@@ -3,6 +3,11 @@ export function round3(n: number): number {
   return r === 0 ? 0 : r;
 }
 
+export function round1(n: number): number {
+  const r = Math.round(n * 10) / 10;
+  return r === 0 ? 0 : r;
+}
+
 export function distXZ(a: readonly [number, number, number], b: readonly [number, number, number]): number {
   return Math.hypot(a[0] - b[0], a[2] - b[2]);
 }

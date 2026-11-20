@@ -3,7 +3,7 @@ export type Vec2 = [number, number];
 export type NightNumber = 1 | 2 | 3;
 
 export type GameState = 'playing' | 'paused' | 'won' | 'lost';
-export type ShadeState = 'spawning' | 'wander' | 'chase' | 'recoil' | 'stunned';
+export type ShadeState = 'spawning' | 'wander' | 'chase' | 'recoil' | 'stunned' | 'drain';
 export type DrifterState = 'idle' | 'chase' | 'flee' | 'removed';
 export type MoteKind = 'random' | 'dropped';
 
@@ -40,6 +40,7 @@ export interface ScenarioPlayer {
   dash_cd_ticks?: number;
   pulse_cd_ticks?: number;
   charm_ticks?: number;
+  successful_lights?: number;
 }
 
 export interface ScenarioLantern {
@@ -47,6 +48,8 @@ export interface ScenarioLantern {
   pos?: Vec3;
   deposited?: number;
   lit?: boolean;
+  fuel?: number;
+  ever_lit?: boolean;
 }
 
 export interface ScenarioShade {
@@ -54,6 +57,7 @@ export interface ScenarioShade {
   pos: Vec3;
   state?: ShadeState;
   state_ticks_left?: number;
+  target_lantern_id?: string;
 }
 
 export interface ScenarioDrifter {
@@ -91,9 +95,11 @@ export interface PlayerState {
   pos: Vec3;
   vel: Vec3;
   grounded: boolean;
-  facing: Vec2; // Unit XZ direction
+  facing: Vec2;
   flames: number;
   carried: number;
+  capacity: number;
+  successfulLights: number;
   invulnTicks: number;
   dashCdTicks: number;
   dashActiveTicks: number;
@@ -109,6 +115,9 @@ export interface LanternEntity {
   pos: Vec3;
   lit: boolean;
   deposited: number;
+  fuelUnits: number; // Integer 1/60 units (6000 == 100.0 fuel)
+  everLit: boolean;
+  relitCount: number;
 }
 
 export interface ShadeEntity {
@@ -121,6 +130,8 @@ export interface ShadeEntity {
   recoilDir: Vec2;
   safePushTicks: number;
   safePushSource: Vec2 | null;
+  targetLanternId: string | null;
+  drainTicks: number;
   spawnTick: number;
 }
 
@@ -175,6 +186,7 @@ export interface SnapshotRecord {
     grounded: boolean;
     flames: number;
     carried: number;
+    capacity: number;
     invuln: boolean;
     dash_cd_s: number;
     pulse_cd_s: number;
@@ -185,6 +197,9 @@ export interface SnapshotRecord {
     pos: Vec3;
     lit: boolean;
     deposited: number;
+    fuel: number;
+    ever_lit: boolean;
+    relit_count: number;
   }>;
   shades: Array<{
     id: string;
@@ -217,6 +232,9 @@ export type EventName =
   | 'mote_picked'
   | 'deposit'
   | 'lantern_lit'
+  | 'refuel'
+  | 'lantern_out'
+  | 'fuel_drain'
   | 'pulse'
   | 'dash'
   | 'charm_picked'

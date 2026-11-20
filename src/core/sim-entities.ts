@@ -9,10 +9,13 @@ import {
   DRIFTER_STEAL_MAX,
   DRIFTER_STEAL_RADIUS,
   DT,
+  FUEL_LOW_THRESHOLD_UNITS,
   INVULN_TICKS,
   PULSE_PUSH_TICKS,
   SHADE_DEFAULT_Y,
   SHADE_DETECT_RADIUS,
+  SHADE_DRAIN_CHASE_RADIUS,
+  SHADE_DRAIN_RADIUS,
   SHADE_HEIGHT_TOLERANCE,
   SHADE_LOSE_RADIUS,
   SHADE_RECOIL_DIST,
@@ -32,9 +35,13 @@ import type {
 type EmitFn = (name: EventName, data: Record<string, unknown>) => void;
 type SpawnDroppedFn = (cx: number, cy: number, cz: number, count: number, ring: boolean) => void;
 
+export function hasSafeZone(l: LanternEntity): boolean {
+  return l.lit && l.fuelUnits >= FUEL_LOW_THRESHOLD_UNITS;
+}
+
 export function clampShadeOutsideSafeZones(pos: Vec3, lanterns: LanternEntity[]): void {
   for (const l of lanterns) {
-    if (!l.lit) continue;
+    if (!hasSafeZone(l)) continue;
     const dx = pos[0] - l.pos[0];
     const dz = pos[2] - l.pos[2];
     const d = Math.hypot(dx, dz);
@@ -89,6 +96,20 @@ function tryMoveShade(night: NightNumber, pos: Vec3, dx: number, dz: number): bo
   return true;
 }
 
+function findWeakLantern(shadePos: Vec3, lanterns: LanternEntity[]): LanternEntity | null {
+  let best: LanternEntity | null = null;
+  let bestDist = Infinity;
+  for (const l of lanterns) {
+    if (!l.lit || l.fuelUnits >= FUEL_LOW_THRESHOLD_UNITS) continue;
+    const d = distXZ(shadePos, l.pos);
+    if (d < bestDist - 1e-9 || (Math.abs(d - bestDist) <= 1e-9 && best && l.id.localeCompare(best.id) < 0)) {
+      bestDist = d;
+      best = l;
+    }
+  }
+  return best;
+}
+
 export function moveShadesAndDrifters(
   night: NightNumber,
   map: MapConfig,
@@ -109,6 +130,8 @@ export function moveShadesAndDrifters(
     }
 
     if (shade.state === 'stunned') {
+      shade.targetLanternId = null;
+      shade.drainTicks = 0;
       if (shade.pushTicksLeft > 0) {
         const pushStep = TUNING.pulse_push_m / PULSE_PUSH_TICKS;
         const moved = tryMoveShade(night, shade.pos, shade.pushDir[0] * pushStep, shade.pushDir[1] * pushStep);
@@ -121,6 +144,8 @@ export function moveShadesAndDrifters(
     }
 
     if (shade.state === 'recoil') {
+      shade.targetLanternId = null;
+      shade.drainTicks = 0;
       const recoilStep = SHADE_RECOIL_DIST / SHADE_RECOIL_TICKS;
       tryMoveShade(night, shade.pos, shade.recoilDir[0] * recoilStep, shade.recoilDir[1] * recoilStep);
       clampShadeOutsideSafeZones(shade.pos, lanterns);
@@ -131,9 +156,32 @@ export function moveShadesAndDrifters(
     if (shade.safePushTicks > 0) continue;
 
     const dPlayer = distXZ(shade.pos, player.pos);
+
+    // Handle active drain state
+    if (shade.state === 'drain') {
+      const targetL = shade.targetLanternId ? lanterns.find((l) => l.id === shade.targetLanternId) : null;
+      if (playerActive && dPlayer <= SHADE_DRAIN_CHASE_RADIUS) {
+        shade.state = 'chase';
+        shade.targetLanternId = null;
+        shade.drainTicks = 0;
+      } else if (
+        !targetL ||
+        !targetL.lit ||
+        targetL.fuelUnits >= FUEL_LOW_THRESHOLD_UNITS ||
+        distXZ(shade.pos, targetL.pos) > SHADE_DRAIN_RADIUS + 1e-6
+      ) {
+        shade.state = 'wander';
+        shade.targetLanternId = null;
+        shade.drainTicks = 0;
+      } else {
+        continue; // Stand still and drain
+      }
+    }
+
     if (shade.state === 'wander') {
       if (playerActive && dPlayer <= SHADE_DETECT_RADIUS) {
         shade.state = 'chase';
+        shade.targetLanternId = null;
       }
     } else if (shade.state === 'chase') {
       if (!playerActive || dPlayer > SHADE_LOSE_RADIUS) {
@@ -150,24 +198,46 @@ export function moveShadesAndDrifters(
         tryMoveShade(night, shade.pos, (dx / d) * step, (dz / d) * step);
       }
       clampShadeOutsideSafeZones(shade.pos, lanterns);
-    } else {
-      // Wander toward nearest unlit lantern slowly
-      let target: LanternEntity | null = null;
-      let best = Infinity;
-      for (const l of lanterns) {
-        if (l.lit) continue;
-        const d = distXZ(shade.pos, l.pos);
-        if (d < best) {
-          best = d;
-          target = l;
+    } else if (shade.state === 'wander') {
+      // Only wander shades select weak lit lanterns (fuel < 30)
+      const weak = findWeakLantern(shade.pos, lanterns);
+      if (weak) {
+        const dWeak = distXZ(shade.pos, weak.pos);
+        if (dWeak <= SHADE_DRAIN_RADIUS) {
+          shade.state = 'drain';
+          shade.targetLanternId = weak.id;
+          shade.drainTicks = 0;
+        } else {
+          const dx = weak.pos[0] - shade.pos[0];
+          const dz = weak.pos[2] - shade.pos[2];
+          const step = Math.min(dWeak, map.shadeSpeed * DT);
+          tryMoveShade(night, shade.pos, (dx / dWeak) * step, (dz / dWeak) * step);
+          clampShadeOutsideSafeZones(shade.pos, lanterns);
+          if (distXZ(shade.pos, weak.pos) <= SHADE_DRAIN_RADIUS) {
+            shade.state = 'drain';
+            shade.targetLanternId = weak.id;
+            shade.drainTicks = 0;
+          }
         }
-      }
-      if (target && best > 2.5) {
-        const dx = target.pos[0] - shade.pos[0];
-        const dz = target.pos[2] - shade.pos[2];
-        const step = map.shadeSpeed * 0.55 * DT;
-        tryMoveShade(night, shade.pos, (dx / best) * step, (dz / best) * step);
-        clampShadeOutsideSafeZones(shade.pos, lanterns);
+      } else {
+        // Fallback: walk toward nearest unlit lantern
+        let target: LanternEntity | null = null;
+        let best = Infinity;
+        for (const l of lanterns) {
+          if (l.lit) continue;
+          const d = distXZ(shade.pos, l.pos);
+          if (d < best - 1e-9 || (Math.abs(d - best) <= 1e-9 && target && l.id.localeCompare(target.id) < 0)) {
+            best = d;
+            target = l;
+          }
+        }
+        if (target && best > 2.0) {
+          const dx = target.pos[0] - shade.pos[0];
+          const dz = target.pos[2] - shade.pos[2];
+          const step = map.shadeSpeed * 0.65 * DT;
+          tryMoveShade(night, shade.pos, (dx / best) * step, (dz / best) * step);
+          clampShadeOutsideSafeZones(shade.pos, lanterns);
+        }
       }
     }
   }
@@ -193,11 +263,8 @@ export function moveShadesAndDrifters(
 
     const dPlayer = distXZ(dr.pos, player.pos);
     const shouldChase = playerActive && !dr.hasStolen && player.carried >= DRIFTER_MIN_CARRIED && dPlayer <= DRIFTER_DETECT_RADIUS;
-    if (dr.state === 'idle' && shouldChase) {
-      dr.state = 'chase';
-    } else if (dr.state === 'chase' && !shouldChase) {
-      dr.state = 'idle';
-    }
+    if (dr.state === 'idle' && shouldChase) dr.state = 'chase';
+    else if (dr.state === 'chase' && !shouldChase) dr.state = 'idle';
 
     if (dr.state === 'chase') {
       const dx = player.pos[0] - dr.pos[0];
@@ -209,7 +276,6 @@ export function moveShadesAndDrifters(
         dr.pos[2] += (dz / d) * step;
       }
     } else {
-      // Idle gentle drift
       dr.idleAngle += 0.6 * DT;
       const nx = dr.pos[0] + Math.cos(dr.idleAngle) * DRIFTER_SPEED_IDLE * DT;
       const nz = dr.pos[2] + Math.sin(dr.idleAngle) * DRIFTER_SPEED_IDLE * DT;
@@ -233,7 +299,6 @@ export function resolveCollisions(
 ): void {
   if (player.respawnWaitTicks > 0 || player.flames <= 0) return;
 
-  // 1. Drifters steal FIRST (ascending ID order, ignores invuln & safe zones)
   const sortedDrifters = [...drifters].sort((a, b) => a.id.localeCompare(b.id));
   for (const dr of sortedDrifters) {
     if (dr.spawnTick === simTick || dr.state !== 'chase' || dr.hasStolen) continue;
@@ -248,12 +313,11 @@ export function resolveCollisions(
     }
   }
 
-  // 2. Shades hit (ascending ID order, max 1 flame lost per tick)
   if (player.invulnTicks > 0) return;
   const sortedShades = [...shades].sort((a, b) => a.id.localeCompare(b.id));
   for (const shade of sortedShades) {
     if (shade.spawnTick === simTick) continue;
-    if (shade.state !== 'wander' && shade.state !== 'chase') continue;
+    if (shade.state !== 'wander' && shade.state !== 'chase' && shade.state !== 'drain') continue;
     if (shade.safePushTicks > 0) continue;
 
     const dXZ = distXZ(player.pos, shade.pos);
@@ -273,9 +337,11 @@ export function resolveCollisions(
       shade.recoilDir = rd > 1e-9 ? [rx / rd, rz / rd] : [1, 0];
       shade.state = 'recoil';
       shade.stateTicksLeft = SHADE_RECOIL_TICKS;
+      shade.targetLanternId = null;
+      shade.drainTicks = 0;
 
       emit('player_hit', { by: 'shade', flames: player.flames, dropped });
-      break; // Max 1 flame lost per tick
+      break;
     }
   }
 }
