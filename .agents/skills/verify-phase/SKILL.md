@@ -1,28 +1,26 @@
 ---
 name: verify-phase
-description: Quy trình chuẩn chạy kiểm chứng, kiểm tra Test Contract, tính tất định và xuất bằng chứng thật cho mỗi phase của Đảo Đèn Lồng.
+description: Quy trình chuẩn chạy kiểm chứng, kiểm tra Test Contract (v1.0/v1.1+), tính tất định, hiệu năng headless/FPS và xuất bằng chứng thật cho mỗi phase của Đảo Đèn Lồng.
 ---
 
-# Skill: Verify Phase & Capture Proof
+# Skill: Verify Phase & Capture Proof (Updated for Phase 2 · Contract v1.1)
 
 Dùng skill này ở cuối mỗi giai đoạn code và trước khi gắn tag `phase-N`.
 
 ## Bước 1 — Kiểm tra đồng bộ & build
-1. Chạy `npm run typecheck` để đảm bảo không lỗi kiểu TypeScript.
-2. Chạy `npm run build` để biên dịch cả bản web 3D (`dist/web`) và CLI headless (`dist/headless.mjs`).
-3. Chạy `npm run sync-check` để xác minh `game.contract.json` khớp chính xác 100% với `src/core/tuning.ts`.
+1. `npm run sync-check`: xác minh `game.contract.json` khớp 100% `src/core/tuning.ts`.
+2. `npm run typecheck`: `tsc --noEmit` đạt 0 lỗi.
+3. `npm run build`: build `dist/web` (Three.js) và `dist/headless.mjs` (Node CLI).
 
-## Bước 2 — Chạy bộ test & tính tất định
+## Bước 2 — Chạy bộ test, regression, tất định & hiệu năng headless
 1. Chạy `npm run verify`:
-   - Thực thi toàn bộ unit test + integration test trên `dist/headless.mjs`.
-   - Kiểm tra lỗi định dạng inputs/scenario trả đúng mã thoát `2`.
-   - Chạy cùng 1 seed/scenario/inputs 2 lần liên tiếp và so khớp SHA-256 của 2 file JSONL đầu ra.
-2. Nếu bất kỳ mục nào thất bại → **DỪNG**, sửa mã nguồn hoặc ghi nhận trung thực, tuyệt đối không tắt test âm thầm.
+   - Toàn bộ unit test + contract test (kể cả regression Phase 1 với số chuẩn và ít nhất 1 scenario headless cho mỗi tính năng mới Phase 2: 3 Đêm, Lướt, Rơi khỏi đảo, Bục nhảy, Gió mạnh, Gió Lạc, Bùa Gió, Tạm dừng).
+   - Kiểm tra lỗi định dạng inputs/scenario thoát đúng mã `2`.
+   - Kiểm tra tính tất định 2 lần chạy so khớp SHA-256.
+   - Đo thời gian chạy đầy đủ Đêm 3 (21.600 tick) phải đạt `<= 30 giây`.
+2. Nếu bất kỳ mục nào đỏ → **DỪNG**, sửa gốc rễ, không tắt test âm thầm.
 
-## Bước 3 — Xuất bằng chứng thật vào `docs/proof/phase-N/`
-1. Lưu mẫu output JSONL thật từ các scenario cốt lõi (win, lose by shades, lose by dawn, pulse & stun, determinism hash).
-2. Khởi chạy bản web tĩnh `dist/web`, mở bằng trình duyệt thật (Playwright), kiểm tra `console.error` bằng 0 và chụp ảnh màn hình thật (title, gameplay, lit lantern, pulse VFX).
-3. Cập nhật bảng truy vết yêu cầu → lệnh chạy → file bằng chứng → kết quả trong `docs/proof/phase-N/PROOF.md`.
-
-## Bước 4 — Review độc lập
-- Dùng 1 phiên/subagent reviewer tách biệt đọc lại diff, `game.contract.json`, và `PROOF.md` đối chiếu trực tiếp với PRD/Ticket và `RUBRIC.md` trước khi chốt tag.
+## Bước 3 — Xuất bằng chứng thật & đo FPS 1280×720 vào `docs/proof/phase-N/`
+1. Chạy `node scripts/generate-proof.mjs` để lưu JSONL thật, hash tất định và kết quả benchmark 21.600 tick.
+2. Mở bản `dist/web` bằng Playwright ở kích thước `1280×720`, kiểm tra `0` console error, đo FPS trung bình (`>= 30 FPS`), chụp ảnh các màn hình thật (Menu, Đêm 1/2/3, HUD, Pause/Settings).
+3. Cập nhật bảng truy vết yêu cầu → bằng chứng trong `docs/proof/phase-N/PROOF.md`.

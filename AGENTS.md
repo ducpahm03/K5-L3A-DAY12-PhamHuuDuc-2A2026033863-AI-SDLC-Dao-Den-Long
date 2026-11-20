@@ -1,27 +1,27 @@
-# AGENTS.md — Đảo Đèn Lồng (Phase 1 · Contract v1.0)
+# AGENTS.md — Đảo Đèn Lồng (Phase 2 · Contract v1.1)
 
 ## Lệnh cốt lõi
 - Cài đặt: `npm ci`
 - Build (3D web + headless CLI): `npm run build`
 - Chạy game 3D: `npm run start` (hoặc `npm run dev`)
-- Chạy headless: `node dist/headless.mjs --seed 42 --night 1 --ticks 600 --out tmp.jsonl`
-- Kiểm chứng toàn bộ (bắt buộc xanh trước khi kết thúc/commit): `npm run verify`
+- Chạy headless: `node dist/headless.mjs --seed 42 --night 1 --ticks 600 --out tmp.jsonl` (`--night` nhận `1 | 2 | 3`)
+- Kiểm chứng toàn bộ (bắt buộc xanh trước khi commit/tag): `npm run verify`
 
 ## Kiến trúc bắt buộc
 - `src/core/` là **lõi mô phỏng thuần TypeScript**: tuyệt đối KHÔNG import `three`, `window`, `document`, `fs`, hay `Math.random()`.
-- Mọi tính ngẫu nhiên bắt buộc đi qua `src/core/rng.ts` (`Mulberry32`) khởi tạo từ `--seed`.
-- `src/core/tuning.ts` là nguồn chân lý duy nhất; mọi thay đổi số phải đồng bộ với `game.contract.json` (`npm run sync-check` kiểm tra tự động).
-- `src/game/` chứa đồ họa 3D, VFX, âm thanh WebAudio, HUD và sáng tạo thẩm mỹ. Không đặt luật chơi ảnh hưởng điểm/vị trí/sự kiện vào `src/game/`.
+- Mọi ngẫu nhiên đi qua `src/core/rng.ts` (`Mulberry32`) khởi tạo từ `--seed`.
+- `src/core/tuning.ts` và `src/core/maps.ts` là nguồn chân lý duy nhất cho số liệu & bản đồ chuẩn; đồng bộ 100% với `game.contract.json` (`npm run sync-check`).
+- `src/game/` chứa 3D (bảng màu chuẩn ≤ 10% RGB), VFX, âm thanh, HUD, cài đặt (`localStorage`) và sáng tạo thẩm mỹ — không làm đổi đầu ra headless.
 
-## Bất biến Test Contract v1.0
-- Bước cố định 60 tick/s (`1/60s`). Snapshot tick `0` sau khi dựng scenario, trước input. Bước `k` (`0..N-1`) tạo trạng thái & sự kiện `tick = k + 1`.
-- Khoảng cách đo trên mặt phẳng ngang XZ giữa các điểm chuẩn (`<= r`), không cộng bán kính nhân vật. Làm tròn tọa độ và `time_left_s` 3 chữ số thập phân (không có `-0`).
-- Chuyển động `move [x,z]` quay theo `cam_yaw_deg`: `x' = x*cosθ + z*sinθ`, `z' = -x*sinθ + z*cosθ`, chuẩn hóa nếu độ dài > 1.
-- Các nút `jump`, `interact`, `pulse` kích hoạt trên cạnh lên (`false -> true`).
-- Dựng scenario KHÔNG phát sự kiện, KHÔNG cộng điểm. File inputs/scenario sai định dạng thoát mã `2` kèm thông báo ra `stderr`.
-- Cùng `--seed`, `--scenario`, `--inputs` phải ra file JSONL giống hệt nhau từng byte.
+## Bất biến Test Contract v1.1 (Phase 2)
+- Bước cố định 60 tick/s, thứ tự bắt buộc **12 bước/tick**:
+  1. Input (`pause` trước; vừa pause thì dừng bước) → 2. Giảm bộ đếm (thời gian, hồi chiêu, bất tử, choáng, bùa, TTL rơi, hồi bùa) → 3. Di chuyển Mây (nhảy, lướt, bục nhảy, gió) + kiểm tra rơi (`Y < -10`) → 4. Nhặt đom đóm & bùa → 5. Tương tác đèn → 6. Cập nhật vùng an toàn (`6m`) → 7. Tỏa Sáng (`3D <= 5m` từ `chân + 0.8m`) → 8. Di chuyển Bóng Mực & Gió Lạc → 9. Chạm (Gió Lạc cướp trước, rồi Bóng Mực gây hit theo `id` tăng dần) → 10. Sinh định kỳ (tương tác từ tick sau) → 11. Xét thắng/thua (`no_flames` → `all_lit` → `dawn`) → 12. Snapshot.
+- 5 trạng thái Bóng Mực bắt buộc đúng tên: `spawning`, `wander`, `chase`, `recoil`, `stunned`.
+- Điểm chuẩn hóa: `+10` mỗi đom đóm **nạp**, `+100` đèn thắp, `+5` mỗi Bóng Mực trúng Tỏa Sáng, thưởng thắng `floor(s)*2 + 50*flames`.
+- Khi tạm dừng (`state: "paused"`): `tick` tăng nhưng `sim_tick`, thời gian, hồi chiêu, spawn, TTL đứng yên.
+- Hiệu năng: headless 1 Đêm đầy đủ (21.600 tick) phải xong trong `<= 30s`; bản 3D đạt `>= 30 FPS` trung bình ở `1280×720`.
+- Lỗi định dạng inputs/scenario thoát mã `2` + `stderr`. Tất định SHA-256 tuyệt đối giữa 2 lần chạy.
 
-## Quy trình kiểm chứng & cổng chất lượng
-- Không bao giờ báo xong khi `npm run verify` chưa trả mã thoát `0`.
-- Không sửa tay bằng chứng, không viết test luôn đạt.
-- Khi có yêu cầu mới ở phase sau, cập nhật file này + `.agents/skills/verify-phase/SKILL.md` và ghi rõ lý do nếu đổi test cũ.
+## Cổng chất lượng
+- Không báo xong khi `npm run verify` chưa trả mã `0`.
+- Không sửa tay bằng chứng, không viết test luôn đạt. Khi thay đổi luật ở phase sau, cập nhật file này và ghi lý do sửa test cũ.
