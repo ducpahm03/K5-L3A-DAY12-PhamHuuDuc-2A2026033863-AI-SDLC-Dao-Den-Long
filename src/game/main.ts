@@ -30,6 +30,7 @@ const sound = new SoundEngine();
 
 const settings = loadSettings();
 sound.setVolume(settings.volume / 100);
+entities.setColorblind(settings.colorblind);
 
 const params = new URLSearchParams(window.location.search);
 const baseSeed = Number.parseInt(params.get('seed') ?? '2026', 10) || 2026;
@@ -80,6 +81,7 @@ const hud = new HudController({
   onSettingsChange: (s) => {
     sound.setVolume(s.volume / 100);
     controls.sensitivity = s.sensitivity;
+    entities.setColorblind(s.colorblind);
   },
   onEndPrimary: () => {
     if (sim.state === 'won') {
@@ -143,10 +145,17 @@ function handleEvents(events: EventRecord[]): void {
         sound.playPickup(sim.player.carried);
         vfx.spawnBurst(sim.player.pos[0], sim.player.pos[1] + 0.9, sim.player.pos[2], PALETTE.moteCore, 10, 3.5);
         break;
-      case 'deposit': {
+      case 'deposit':
+      case 'refuel': {
         sound.playDeposit();
         const l = sim.lanterns.find((x) => x.id === ev.data.lantern_id);
         if (l) vfx.spawnBurst(l.pos[0], l.pos[1] + 3.2, l.pos[2], PALETTE.lanternLit, 12, 4.0);
+        break;
+      }
+      case 'lantern_out': {
+        sound.playHit();
+        const l = sim.lanterns.find((x) => x.id === ev.data.lantern_id);
+        if (l) vfx.spawnBurst(l.pos[0], l.pos[1] + 3.6, l.pos[2], PALETTE.shadeRim, 16, 4.5);
         break;
       }
       case 'lantern_lit': {

@@ -1,15 +1,16 @@
 import * as THREE from 'three';
-import { distXZ } from '../core/rng.js';
+import { distXZ, round1 } from '../core/rng.js';
 import type { Simulation } from '../core/simulation.js';
-import { TICK_RATE, TUNING } from '../core/tuning.js';
+import { FUEL_LOW_THRESHOLD_UNITS, FUEL_MAX_UNITS, FUEL_UNIT_SCALE, TICK_RATE, TUNING } from '../core/tuning.js';
 import type { NightNumber } from '../core/types.js';
 
 export interface UserSettings {
-  volume: number; // 0..100
-  sensitivity: number; // 0.3..2.5
+  volume: number;
+  sensitivity: number;
+  colorblind: boolean;
 }
 
-const SETTINGS_KEY = 'dao_den_long_settings_v1';
+const SETTINGS_KEY = 'dao_den_long_settings_v2';
 
 export function loadSettings(): UserSettings {
   try {
@@ -19,12 +20,13 @@ export function loadSettings(): UserSettings {
       return {
         volume: typeof parsed.volume === 'number' ? Math.max(0, Math.min(100, parsed.volume)) : 70,
         sensitivity: typeof parsed.sensitivity === 'number' ? Math.max(0.3, Math.min(2.5, parsed.sensitivity)) : 1.0,
+        colorblind: Boolean(parsed.colorblind),
       };
     }
   } catch {
     // Ignore storage restriction
   }
-  return { volume: 70, sensitivity: 1.0 };
+  return { volume: 70, sensitivity: 1.0, colorblind: false };
 }
 
 export function saveSettings(s: UserSettings): void {
@@ -65,9 +67,11 @@ export class HudController {
   private readonly volLabel = document.getElementById('label-volume')!;
   private readonly sensInput = document.getElementById('input-sens') as HTMLInputElement;
   private readonly sensLabel = document.getElementById('label-sens')!;
+  private readonly cbInput = document.getElementById('input-colorblind') as HTMLInputElement;
   private readonly projVec = new THREE.Vector3();
 
   private settingsReturnTo: 'menu' | 'pause' = 'menu';
+  private colorblind = false;
 
   constructor(callbacks: {
     settings: UserSettings;
@@ -103,19 +107,29 @@ export class HudController {
     this.volLabel.textContent = `${Math.round(callbacks.settings.volume)}%`;
     this.sensInput.value = String(Math.round(callbacks.settings.sensitivity * 100));
     this.sensLabel.textContent = `${callbacks.settings.sensitivity.toFixed(1)}x`;
+    this.cbInput.checked = callbacks.settings.colorblind;
+    this.applyColorblind(callbacks.settings.colorblind);
 
     const emitSettings = () => {
       const s: UserSettings = {
         volume: Number(this.volInput.value),
         sensitivity: Number(this.sensInput.value) / 100,
+        colorblind: this.cbInput.checked,
       };
       this.volLabel.textContent = `${Math.round(s.volume)}%`;
       this.sensLabel.textContent = `${s.sensitivity.toFixed(1)}x`;
+      this.applyColorblind(s.colorblind);
       saveSettings(s);
       callbacks.onSettingsChange(s);
     };
     this.volInput.addEventListener('input', emitSettings);
     this.sensInput.addEventListener('input', emitSettings);
+    this.cbInput.addEventListener('change', emitSettings);
+  }
+
+  private applyColorblind(cb: boolean): void {
+    this.colorblind = cb;
+    document.body.classList.toggle('colorblind', cb);
   }
 
   private hideAll(): void {
@@ -175,27 +189,27 @@ export class HudController {
 
     if (isFinalWin) {
       document.getElementById('end-eyebrow')!.textContent = 'Bình Minh Trên Ba Hòn Đảo';
-      document.getElementById('end-title')!.textContent = 'Chúc Mừng! Cả Ba Đảo Đã Sáng!';
+      document.getElementById('end-title')!.textContent = 'Chúc Mừng! Giữ Đảo Sáng Tới Bình Minh!';
       document.getElementById('end-desc')!.textContent =
-        'Mây đã thắp sáng trọn vẹn Đảo Bến, Đảo Cau và Đảo Chuông, xua tan màn sương mực đón bình minh ấm áp.';
+        'Mây đã châm dầu và bảo vệ ngọn lửa qua cả 3 Đêm, đón ánh bình minh rực rỡ trên quần đảo.';
       btnPrimary.textContent = 'Chơi Lại Từ Đêm 1';
     } else if (sim.state === 'won') {
-      document.getElementById('end-eyebrow')!.textContent = `Hoàn Thành Đêm ${sim.night}`;
-      document.getElementById('end-title')!.textContent = `${sim.map.name} Đã Sáng!`;
-      document.getElementById('end-desc')!.textContent = 'Sẵn sàng chèo thuyền sang hòn đảo tiếp theo!';
+      document.getElementById('end-eyebrow')!.textContent = `Sống Sót Qua Đêm ${sim.night}`;
+      document.getElementById('end-title')!.textContent = `Bình Minh Đã Tới Trên ${sim.map.name}!`;
+      document.getElementById('end-desc')!.textContent = 'Đủ số đèn vẫn sáng rực khi bình minh lên. Sang đảo tiếp theo!';
       btnPrimary.textContent = `Sang Đêm ${sim.night + 1}`;
     } else {
       document.getElementById('end-eyebrow')!.textContent = `Thất Bại · Đêm ${sim.night}`;
       document.getElementById('end-title')!.textContent =
-        reason === 'dawn' ? 'Hết Giờ Trước Bình Minh...' : 'Ngọn Lửa Đã Tắt...';
-      document.getElementById('end-desc')!.textContent = 'Bạn có thể chơi lại ngay Đêm này để thử chiến thuật khác.';
+        reason === 'dawn' ? 'Không Đủ Đèn Sáng Khi Bình Minh...' : 'Ngọn Lửa Đã Tắt...';
+      document.getElementById('end-desc')!.textContent = 'Hãy châm dầu cho đèn dưới 30% và xua Bóng Mực hút dầu!';
       btnPrimary.textContent = `Chơi Lại Đêm ${sim.night}`;
     }
 
     document.getElementById('end-stats')!.innerHTML = `
       <div class="end-stat-box"><div class="val">${sim.score}</div><div class="lbl">Điểm Đêm ${sim.night}</div></div>
       <div class="end-stat-box"><div class="val">${campaignTotal}</div><div class="lbl">Tổng điểm</div></div>
-      <div class="end-stat-box"><div class="val">${litCount}/${sim.lanterns.length}</div><div class="lbl">Đèn đã sáng</div></div>
+      <div class="end-stat-box"><div class="val">${litCount}/${sim.lanterns.length}</div><div class="lbl">Đèn giữ sáng</div></div>
     `;
   }
 
@@ -215,30 +229,33 @@ export class HudController {
     const secs = Math.max(0, Math.ceil(sim.timeLeftS));
     const mm = String(Math.floor(secs / 60)).padStart(2, '0');
     const ss = String(secs % 60).padStart(2, '0');
-    this.timerEl.textContent = `${mm}:${ss}`;
+    const warnPrefix = this.colorblind && sim.timeLeftS <= 30 ? '⚠ ' : '';
+    this.timerEl.textContent = `${warnPrefix}${mm}:${ss}`;
     this.timerEl.classList.toggle('danger', sim.timeLeftS <= 30);
 
+    const lowLanterns = sim.lanterns.filter((l) => l.lit && l.fuelUnits < FUEL_LOW_THRESHOLD_UNITS);
     if (sim.wind.warning) {
       this.windAlertEl.classList.remove('hidden');
-      this.windAlertEl.textContent = 'Lá bay! Cơn gió mạnh sắp ập tới...';
-    } else if (sim.wind.active) {
+      this.windAlertEl.textContent = `${this.colorblind ? '⚠ ' : ''}Lá bay! Gió mạnh sắp thổi!`;
+    } else if (lowLanterns.length > 0) {
       this.windAlertEl.classList.remove('hidden');
-      this.windAlertEl.textContent = 'Gió mạnh đang thổi!';
+      this.windAlertEl.textContent = `${this.colorblind ? '⚠ ' : ''}Đèn sắp cạn dầu: ${lowLanterns.map((l) => l.id).join(', ')}`;
     } else {
       this.windAlertEl.classList.add('hidden');
     }
 
     const litCount = sim.lanterns.filter((l) => l.lit).length;
-    this.lanternCountEl.textContent = `Đèn ${litCount}/${sim.lanterns.length}`;
+    const reqLit = Math.ceil(TUNING.win_ratio * sim.lanterns.length);
+    this.lanternCountEl.textContent = `Đèn ${litCount}/${sim.lanterns.length} (cần ≥${reqLit})`;
     this.scoreEl.textContent = String(sim.score);
 
-    // 10-slot carried mote bar
-    this.motesBarEl.innerHTML = Array.from({ length: TUNING.carry_capacity }, (_, i) =>
-      `<span class="mote-slot ${i < sim.player.carried ? 'filled' : ''}"></span>`,
+    // Dynamic capacity bar (10..20)
+    this.motesBarEl.style.gridTemplateColumns = `repeat(${sim.player.capacity}, 14px)`;
+    this.motesBarEl.innerHTML = Array.from({ length: sim.player.capacity }, (_, i) =>
+      `<span class="mote-slot ${i < sim.player.carried ? 'filled' : ''}" style="width:14px"></span>`,
     ).join('');
-    this.motesTextEl.textContent = `Đom đóm: ${sim.player.carried} / ${TUNING.carry_capacity}`;
+    this.motesTextEl.textContent = `Đom đóm: ${sim.player.carried} / ${sim.player.capacity}`;
 
-    // Dash & Pulse cooldown cards
     const dashReady = sim.player.dashCdTicks === 0 || sim.player.charmTicks > 0;
     this.dashCardEl.classList.toggle('ready', dashReady);
     this.dashValEl.textContent = sim.player.charmTicks > 0
@@ -255,27 +272,42 @@ export class HudController {
         ? `Cần ${TUNING.pulse_cost}`
         : 'Sẵn sàng';
 
-    // Nearest unlit lantern prompt & offscreen screen-edge arrow
-    let nearest = null;
-    let bestDist = Infinity;
+    // Selectable lantern for interact prompt (unlit OR lit with fuel < 100)
+    let bestInteract = null;
+    let bestIDist = Infinity;
     for (const l of sim.lanterns) {
-      if (l.lit) continue;
+      if (l.lit && l.fuelUnits >= FUEL_MAX_UNITS) continue;
       const d = distXZ(sim.player.pos, l.pos);
-      if (d < bestDist) {
-        bestDist = d;
-        nearest = l;
+      if (d <= TUNING.interact_radius && d < bestIDist) {
+        bestIDist = d;
+        bestInteract = l;
       }
     }
-
-    if (nearest && bestDist <= TUNING.interact_radius) {
-      this.promptEl.textContent = `E — Nạp ánh sáng (${nearest.deposited}/${TUNING.lantern_cost})`;
+    if (bestInteract) {
+      if (!bestInteract.lit) {
+        const cost = bestInteract.everLit ? TUNING.relight_cost : TUNING.lantern_cost;
+        this.promptEl.textContent = `E — ${bestInteract.everLit ? 'Thắp lại' : 'Nạp ánh sáng'} (${bestInteract.deposited}/${cost})`;
+      } else {
+        this.promptEl.textContent = `E — Châm dầu ${bestInteract.id} (${round1(bestInteract.fuelUnits / FUEL_UNIT_SCALE)}/100)`;
+      }
       this.promptEl.classList.remove('hidden');
     } else {
       this.promptEl.classList.add('hidden');
     }
 
-    if (nearest) {
-      this.projVec.set(nearest.pos[0], nearest.pos[1] + 3.5, nearest.pos[2]).project(camera);
+    // Offscreen arrow points to nearest unlit or low-fuel lantern
+    let targetL = null;
+    let bestDist = Infinity;
+    for (const l of sim.lanterns) {
+      if (l.lit && l.fuelUnits >= FUEL_LOW_THRESHOLD_UNITS) continue;
+      const d = distXZ(sim.player.pos, l.pos);
+      if (d < bestDist) {
+        bestDist = d;
+        targetL = l;
+      }
+    }
+    if (targetL) {
+      this.projVec.set(targetL.pos[0], targetL.pos[1] + 3.5, targetL.pos[2]).project(camera);
       const onScreen =
         this.projVec.z >= -1 &&
         this.projVec.z <= 1 &&
@@ -293,15 +325,13 @@ export class HudController {
         const angle = Math.atan2(sy, sx);
         const cx = window.innerWidth / 2;
         const cy = window.innerHeight / 2;
-        const rx = cx - 44;
-        const ry = cy - 48;
-        const px = cx + Math.cos(angle) * rx;
-        const py = cy - Math.sin(angle) * ry;
+        const px = cx + Math.cos(angle) * (cx - 44);
+        const py = cy - Math.sin(angle) * (cy - 48);
         this.arrowEl.classList.remove('hidden');
         this.arrowEl.style.left = `${Math.round(px - 18)}px`;
         this.arrowEl.style.top = `${Math.round(py - 20)}px`;
         this.arrowGlyphEl.style.transform = `rotate(${Math.round(90 - (angle * 180) / Math.PI)}deg)`;
-        this.arrowLabelEl.textContent = `${nearest.id} · ${Math.round(bestDist)}m`;
+        this.arrowLabelEl.textContent = `${targetL.id} · ${Math.round(bestDist)}m`;
       }
     } else {
       this.arrowEl.classList.add('hidden');

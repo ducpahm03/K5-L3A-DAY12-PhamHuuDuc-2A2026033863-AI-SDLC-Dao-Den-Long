@@ -1,11 +1,16 @@
 import * as THREE from 'three';
 import type { Simulation } from '../core/simulation.js';
-import { TUNING } from '../core/tuning.js';
+import { FUEL_LOW_THRESHOLD_UNITS, FUEL_MAX_UNITS, FUEL_UNIT_SCALE, TUNING } from '../core/tuning.js';
 import { PALETTE } from './scene.js';
 
 interface LanternVisual {
   group: THREE.Group;
+  coreMesh: THREE.Mesh;
   coreMat: THREE.MeshStandardMaterial;
+  tearMesh: THREE.Mesh;
+  fuelBarGroup: THREE.Group;
+  fuelFill: THREE.Mesh;
+  fuelMat: THREE.MeshBasicMaterial;
   light: THREE.PointLight;
   beacon: THREE.Mesh;
   safeRing: THREE.Mesh;
@@ -25,6 +30,7 @@ export class EntityRenderer {
   private readonly danglingLantern = new THREE.Group();
   private readonly charmAura: THREE.Mesh;
   private readonly carriedOrbs: THREE.Mesh[] = [];
+  private colorblind = false;
 
   private readonly lanternMap = new Map<string, LanternVisual>();
   private readonly shadeMap = new Map<string, ShadeVisual>();
@@ -91,7 +97,7 @@ export class EntityRenderer {
     this.charmAura.visible = false;
     this.playerGroup.add(this.charmAura);
 
-    for (let i = 0; i < TUNING.carry_capacity; i++) {
+    for (let i = 0; i < TUNING.capacity_max; i++) {
       const orb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), this.moteMat);
       orb.visible = false;
       this.playerGroup.add(orb);
@@ -99,6 +105,10 @@ export class EntityRenderer {
     }
 
     this.scene.add(this.playerGroup);
+  }
+
+  setColorblind(cb: boolean): void {
+    this.colorblind = cb;
   }
 
   clearAllDynamic(): void {
@@ -125,12 +135,33 @@ export class EntityRenderer {
     group.add(pillar);
 
     const coreMat = new THREE.MeshStandardMaterial({ color: PALETTE.lanternOff, emissive: 0x222536, emissiveIntensity: 0.35 });
-    const core = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.52, 1.2, 6), coreMat);
-    core.position.y = 3.7;
-    group.add(core);
+    const coreMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.52, 1.2, 6), coreMat);
+    coreMesh.position.y = 3.7;
+    group.add(coreMesh);
+
+    // Tear mark on unlit lantern paper (non-color distinction required by Ticket-03 Section 6)
+    const tearMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 0.78, 1.22),
+      new THREE.MeshBasicMaterial({ color: 0x120a1a }),
+    );
+    tearMesh.position.y = 3.7;
+    tearMesh.rotation.z = 0.28;
+    group.add(tearMesh);
+
     const roof = new THREE.Mesh(new THREE.ConeGeometry(1.22, 0.72, 6), woodMat);
     roof.position.y = 4.6;
     group.add(roof);
+
+    // 3D Fuel Bar above lantern
+    const fuelBarGroup = new THREE.Group();
+    fuelBarGroup.position.y = 5.45;
+    const bgBar = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.16, 0.08), new THREE.MeshBasicMaterial({ color: 0x151828 }));
+    fuelBarGroup.add(bgBar);
+    const fuelMat = new THREE.MeshBasicMaterial({ color: PALETTE.gold });
+    const fuelFill = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.12, 0.1), fuelMat);
+    fuelBarGroup.add(fuelFill);
+    fuelBarGroup.visible = false;
+    group.add(fuelBarGroup);
 
     const light = new THREE.PointLight(PALETTE.lanternLit, 0, 22, 1.5);
     light.position.y = 3.7;
@@ -154,7 +185,7 @@ export class EntityRenderer {
     group.add(safeRing);
 
     this.scene.add(group);
-    const vis: LanternVisual = { group, coreMat, light, beacon, safeRing };
+    const vis: LanternVisual = { group, coreMesh, coreMat, tearMesh, fuelBarGroup, fuelFill, fuelMat, light, beacon, safeRing };
     this.lanternMap.set(id, vis);
     return vis;
   }
@@ -227,26 +258,45 @@ export class EntityRenderer {
       }
     }
 
+    // 1 Hz slow blink phase for low fuel (< 30)
+    const blinkOn = Math.sin(elapsed * Math.PI * 2) >= -0.2;
+
     for (const l of sim.lanterns) {
       const vis = this.lanternMap.get(l.id) ?? this.createLantern(l.id);
       vis.group.position.set(l.pos[0], l.pos[1], l.pos[2]);
       if (l.lit) {
+        const lowFuel = l.fuelUnits < FUEL_LOW_THRESHOLD_UNITS;
+        const frac = Math.max(0.02, l.fuelUnits / FUEL_MAX_UNITS);
+        vis.coreMesh.scale.set(1, 1, 1);
+        vis.tearMesh.visible = false;
+        vis.fuelBarGroup.visible = !lowFuel || blinkOn;
+        vis.fuelFill.scale.x = frac;
+        vis.fuelFill.position.x = -((1 - frac) * 1.36) / 2;
+        vis.fuelMat.color.setHex(lowFuel ? (this.colorblind ? 0xffffff : 0xff5a5f) : PALETTE.gold);
+
+        const dimFactor = lowFuel && !blinkOn ? 0.35 : 1.0;
         vis.coreMat.color.setHex(PALETTE.lanternCore);
         vis.coreMat.emissive.setHex(PALETTE.lanternLit);
-        vis.coreMat.emissiveIntensity = 1.8;
-        vis.light.intensity = 9.0;
+        vis.coreMat.emissiveIntensity = 1.8 * dimFactor;
+        vis.light.intensity = 9.0 * dimFactor;
         vis.beacon.visible = true;
-        vis.safeRing.visible = true;
+        vis.safeRing.visible = !lowFuel; // Loses safe zone when fuel < 30
       } else {
+        // Unlit lantern: squashed by 20% + visible tear mark
+        vis.coreMesh.scale.set(1.06, 0.8, 1.06);
+        vis.tearMesh.visible = true;
+        vis.fuelBarGroup.visible = false;
+        const cost = l.everLit ? TUNING.relight_cost : TUNING.lantern_cost;
         vis.coreMat.color.setHex(PALETTE.lanternOff);
         vis.coreMat.emissive.setHex(l.deposited > 0 ? 0x8f5d1e : 0x1c2030);
-        vis.coreMat.emissiveIntensity = 0.35 + (l.deposited / TUNING.lantern_cost) * 0.9;
-        vis.light.intensity = (l.deposited / TUNING.lantern_cost) * 3.0;
+        vis.coreMat.emissiveIntensity = 0.35 + (l.deposited / cost) * 0.9;
+        vis.light.intensity = (l.deposited / cost) * 3.0;
         vis.beacon.visible = false;
         vis.safeRing.visible = false;
       }
     }
 
+    const shadeRimHex = this.colorblind ? 0x00b3ff : PALETTE.shadeRim;
     const shadeIds = new Set(sim.shades.map((s) => s.id));
     for (const [id, v] of this.shadeMap) if (!shadeIds.has(id)) { this.scene.remove(v.group); this.shadeMap.delete(id); }
     for (const s of sim.shades) {
@@ -256,13 +306,17 @@ export class EntityRenderer {
       vis.group.position.set(s.pos[0], s.pos[1] + Math.sin(elapsed * 3.5 + s.pos[0]) * 0.14, s.pos[2]);
       vis.group.rotation.y = Math.atan2(px - s.pos[0], pz - s.pos[2]);
       vis.stunRing.visible = s.state === 'stunned';
+      vis.rimMat.color.setHex(shadeRimHex);
       if (s.state === 'stunned') {
         vis.bodyMat.color.setHex(PALETTE.shadeStun);
         vis.bodyMat.emissive.setHex(PALETTE.gold);
         vis.stunRing.rotation.z = elapsed * 4;
+      } else if (s.state === 'drain') {
+        vis.bodyMat.color.setHex(PALETTE.shadeBody);
+        vis.bodyMat.emissive.setHex(PALETTE.lanternLit);
       } else {
         vis.bodyMat.color.setHex(PALETTE.shadeBody);
-        vis.bodyMat.emissive.setHex(PALETTE.shadeRim);
+        vis.bodyMat.emissive.setHex(shadeRimHex);
       }
     }
 
@@ -298,4 +352,7 @@ export class EntityRenderer {
       g.rotation.y = elapsed * 2.2;
     }
   }
+
+  // Exported to prevent unused import warning
+  public static readonly SCALE = FUEL_UNIT_SCALE;
 }
