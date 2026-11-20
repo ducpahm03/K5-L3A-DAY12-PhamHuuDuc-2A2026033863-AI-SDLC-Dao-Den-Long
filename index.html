@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%2316102b'/%3E%3Ccircle cx='32' cy='32' r='16' fill='%23ffbe5c'/%3E%3Ccircle cx='32' cy='32' r='8' fill='%23fff4cc'/%3E%3C/svg%3E" />
+    <title>Đảo Đèn Lồng — Đêm 1: Đảo Bến</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+
+      <!-- Top HUD -->
+      <div id="hud" class="hud hidden">
+        <div class="hud-panel hud-left">
+          <div class="stat-row">
+            <span class="stat-label">Lửa Mây</span>
+            <div id="hud-flames" class="flames-row"></div>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Đom Đóm</span>
+            <div id="hud-carried" class="motes-row"></div>
+          </div>
+          <div class="stat-row score-row">
+            <span class="stat-label">Điểm</span>
+            <span id="hud-score" class="score-value">0</span>
+          </div>
+        </div>
+
+        <div class="hud-panel hud-center">
+          <div class="night-title">Đêm 1 · Đảo Bến</div>
+          <div id="hud-lanterns" class="lanterns-row"></div>
+          <div class="clock-compass-row">
+            <span id="hud-timer" class="timer-value">03:00</span>
+            <span id="hud-compass" class="compass-pill">Đèn gần nhất: --</span>
+          </div>
+        </div>
+
+        <div class="hud-panel hud-right">
+          <button id="btn-audio" class="icon-btn" title="Bật/Tắt âm thanh">Âm thanh: Bật</button>
+          <button id="btn-lock" class="icon-btn" title="Khóa chuột xoay camera">Khóa chuột: Tắt</button>
+          <button id="btn-restart-hud" class="icon-btn" title="Chơi lại Đêm 1">Chơi lại</button>
+        </div>
+
+        <div id="hud-prompt" class="prompt-banner hidden"></div>
+
+        <div class="pulse-dock">
+          <div id="hud-pulse" class="pulse-badge">
+            <span class="pulse-key">F / Chuột phải</span>
+            <span id="hud-pulse-text" class="pulse-status">Tỏa sáng (1 đom đóm)</span>
+          </div>
+          <div class="controls-mini">WASD: Đi · Space: Nhảy · E: Nạp đèn · Kéo chuột / ←→: Xoay</div>
+        </div>
+      </div>
+
+      <!-- Title Overlay -->
+      <div id="overlay-title" class="overlay">
+        <div class="overlay-card title-card">
+          <div class="eyebrow">Day 12 · AI SDLC · Phase 1</div>
+          <h1>Đảo Đèn Lồng</h1>
+          <p class="subtitle">Đêm 1 — Đảo Bến</p>
+          <p class="lore">
+            Sương đen đã nuốt trọn ánh sáng của hòn đảo giữa biển mây. Hãy cùng <strong>Mây</strong> thu thập
+            đom đóm, thắp sáng lại <strong>5 Đèn Lồng Lớn</strong> và dùng <strong>Tỏa Sáng</strong> đẩy lùi
+            <strong>Bóng Mực</strong> trước khi bình minh tới.
+          </p>
+          <div class="controls-grid">
+            <div><kbd>W A S D</kbd> Di chuyển</div>
+            <div><kbd>Space</kbd> Nhảy</div>
+            <div><kbd>E</kbd> Nạp ánh sáng vào đèn</div>
+            <div><kbd>F</kbd> / <kbd>Chuột phải</kbd> Tỏa sáng (xua Bóng Mực)</div>
+            <div><kbd>Kéo chuột</kbd> / <kbd>← →</kbd> Xoay camera 3D</div>
+            <div><kbd>Click khóa</kbd> Chế độ Pointer Lock tùy chọn</div>
+          </div>
+          <button id="btn-start" class="primary-btn">Bắt Đầu Thắp Đèn</button>
+        </div>
+      </div>
+
+      <!-- End Overlay -->
+      <div id="overlay-end" class="overlay hidden">
+        <div class="overlay-card end-card">
+          <div id="end-eyebrow" class="eyebrow">Kết thúc Đêm 1</div>
+          <h2 id="end-title">Đảo Bến Đã Bừng Sáng!</h2>
+          <p id="end-desc" class="lore"></p>
+          <div id="end-stats" class="end-stats"></div>
+          <button id="btn-replay" class="primary-btn">Chơi Lại Đêm 1</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/game/main.ts"></script>
+  </body>
+</html>
