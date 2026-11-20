@@ -398,11 +398,13 @@ export class Simulation {
           shade.pos[0] += (dx / d) * stepDist;
           shade.pos[2] += (dz / d) * stepDist;
         }
+        clampToIsland(shade.pos);
         if (this.pushOutOfSafeZones(shade.pos)) {
           shade.state = 'flee';
         }
       }
       clampToIsland(shade.pos);
+      this.pushOutOfSafeZones(shade.pos);
 
       if (this.player.invulnTimer <= 1e-9 && distXZ(this.player.pos, shade.pos) <= TUNING.shade_hit_radius) {
         this.player.flames = Math.max(0, this.player.flames - 1);

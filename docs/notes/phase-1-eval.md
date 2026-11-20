@@ -13,4 +13,8 @@
 ## 3. Hạn chế trung thực & hướng cải thiện ở Phase 2
 - Ảnh `01-title.png` và `02-gameplay.png` được chụp trước bản vá bỏ font `Georgia` nên chữ tiêu đề trong ảnh chụp trước có khoảng hở nhẹ ở dấu tiếng Việt; mã nguồn đã được vá sạch (`src/game/styles.css`) và build lại xanh, sẽ cập nhật bộ ảnh chụp mới ở bước kiểm chứng Phase 2.
 - Chưa có màn hình đo FPS hiển thị trực tiếp và chưa hỗ trợ nhiều đêm/hòn đảo (thuộc phạm vi Phase 2).
-- Cần cập nhật `AGENTS.md` và `.agents/skills/verify-phase/SKILL.md` ngay khi nhận toàn văn Ticket-02 để phản ánh Test Contract mới và giữ regression Phase 1 xanh.
+## 4. Kết Quả Review Độc Lập (Independent Reviewer Subagent)
+- **Người đánh giá:** Subagent reviewer tách biệt (`research`, read-only, không viết mã nguồn).
+- **Phán quyết:** **APPROVE** — xác nhận khớp 100% `game.contract.json` ↔ `src/core/tuning.ts`, đúng mô hình tick, khoảng cách XZ, công thức quay `cam_yaw_deg`, rising-edge input, scenario setup 0 sự kiện/0 điểm, mã thoát `2`, tách lớp thuần TS trong `src/core/`, và đối chiếu lại toàn bộ số liệu JSONL + SHA-256 trong `docs/proof/phase-1/`.
+- **Góp ý biên được xử lý ngay:** Đảm bảo thứ tự `clampToIsland` trước `pushOutOfSafeZones` cuối vòng lặp Bóng Mực để bất biến `dist >= safe_radius` luôn giữ nguyên ngay cả khi scenario tùy biến đặt đèn đã thắp sát mép đảo (`r > 29m`).
+
