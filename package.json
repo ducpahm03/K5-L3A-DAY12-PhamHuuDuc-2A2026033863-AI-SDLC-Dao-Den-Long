@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "sync-check": "node scripts/sync-check.mjs",
-    "verify": "node scripts/verify-all.mjs"
+    "verify": "node scripts/verify-all.mjs",
+    "record-demo": "node scripts/record-demo.mjs"
   },
   "dependencies": {
     "three": "^0.170.0"
@@ -25,6 +26,7 @@
     "@types/node": "^22.10.0",
     "@types/three": "^0.170.0",
     "esbuild": "^0.24.2",
+    "playwright": "^1.65.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
     "vitest": "^2.1.8"

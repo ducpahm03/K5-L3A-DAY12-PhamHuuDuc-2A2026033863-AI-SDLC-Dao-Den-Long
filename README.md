@@ -1,5 +1,6 @@
 # Đảo Đèn Lồng — Day 12 AI SDLC Lab (Release v1.0.0)
 
+> **Video Demo nghiệm thu (< 5 phút):** [docs/demo/demo.mp4](docs/demo/demo.mp4) · [Kịch bản chi tiết](docs/demo/SCRIPT.md)  
 > **Học viên:** Phạm Hữu Đức (`2A2026033863`) · **Lớp:** K5-L3A · **Phiên bản:** `v1.0.0` (Contract v1.3)  
 > **Tags:** `phase-1` → `phase-2` → `phase-3` → `phase-4`  
 > **Bằng chứng kiểm chứng:**
