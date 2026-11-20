@@ -1,13 +1,13 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { getMapConfig } from '../core/maps.js';
 import { InputTimeline, Simulation } from '../core/simulation.js';
-import { getDefaultNight1Lanterns } from '../core/tuning.js';
-import type { InputFrame, JsonlRecord, ScenarioSpec } from '../core/types.js';
+import type { InputFrame, JsonlRecord, NightNumber, ScenarioSpec } from '../core/types.js';
 import { ValidationError, validateInputsFile, validateScenarioSpec } from '../core/validation.js';
 
 interface CliArgs {
   seed: number;
-  night: number;
+  night: NightNumber;
   scenarioPath?: string;
   inputsPath?: string;
   ticks: number;
@@ -68,8 +68,9 @@ function parseArgs(argv: string[]): CliArgs {
   }
 
   if (seed === undefined) throw new Error('Missing required flag --seed');
-  if (night === undefined) throw new Error('Missing required flag --night');
-  if (night !== 1) throw new Error(`Unsupported --night ${night} (Phase 1 supports --night 1 only)`);
+  if (night !== 1 && night !== 2 && night !== 3) {
+    throw new Error(`Invalid --night ${night ?? '(missing)'} (supported: 1, 2, 3)`);
+  }
   if (ticks === undefined || ticks < 0) throw new Error('Missing or invalid --ticks (must be >= 0)');
   if (!outPath) throw new Error('Missing required flag --out');
   if (snapshotEvery <= 0) throw new Error('--snapshot-every must be a positive integer');
@@ -94,7 +95,8 @@ function readJsonFile(path: string, label: string): unknown {
 function main(): void {
   try {
     const args = parseArgs(process.argv.slice(2));
-    const validLanternIds = new Set(getDefaultNight1Lanterns().map((l) => l.id));
+    const mapCfg = getMapConfig(args.night);
+    const validLanternIds = new Set(mapCfg.lanterns.map((l) => l.id));
 
     let scenario: ScenarioSpec | undefined;
     if (args.scenarioPath) {
@@ -108,18 +110,22 @@ function main(): void {
       frames = validateInputsFile(raw).frames;
     }
 
-    const sim = new Simulation(args.seed, scenario);
+    const sim = new Simulation(args.seed, args.night, scenario);
     const timeline = new InputTimeline(frames);
     const lines: string[] = [];
     const push = (rec: JsonlRecord): void => {
       lines.push(JSON.stringify(rec));
     };
 
-    // Snapshot tick 0 after scenario setup, before any input
+    // Tick 0 snapshot after scenario setup, before any input
     push(sim.getSnapshot());
+    if (!scenario) {
+      push({ type: 'event', tick: 0, name: 'night_start', data: { night: args.night } });
+    }
 
+    const isEnded = (): boolean => sim.state === 'won' || sim.state === 'lost';
     for (let k = 0; k < args.ticks; k++) {
-      if (sim.state !== 'playing') break;
+      if (isEnded()) break;
       const input = timeline.atTick(k);
       const events = sim.step(input);
       for (const ev of events) {
@@ -128,7 +134,7 @@ function main(): void {
       if (sim.tick % args.snapshotEvery === 0) {
         push(sim.getSnapshot());
       }
-      if (sim.state !== 'playing') break;
+      if (isEnded()) break;
     }
 
     push(sim.getEndRecord());

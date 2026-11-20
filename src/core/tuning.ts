@@ -1,69 +1,91 @@
-import { round3 } from './rng.js';
-import type { Vec3 } from './types.js';
-
-export const CONTRACT_VERSION = '1.0' as const;
+export const CONTRACT_VERSION = '1.1' as const;
 export const TEAM_ID = '2A2026033863-pham-huu-duc' as const;
 
 export const TICK_RATE = 60;
 export const DT = 1 / TICK_RATE;
 
-export const ISLAND_RADIUS = 35;
-export const LANTERN_RING_RADIUS = 22;
-export const SHADE_DEFAULT_Y = 1.0;
+export const JUMP_VELOCITY = 7.0;
+export const GRAVITY = -20.0;
+export const ACCEL_TIME_S = 0.08; // Reaches full speed / stops within <= 0.1s
 
-export const JUMP_VELOCITY = 7.5;
-export const GRAVITY = -20;
+export const DASH_TICKS = 12; // 0.2s
+export const DASH_COOLDOWN_TICKS = 90; // 1.5s from dash start
+export const PULSE_COOLDOWN_TICKS = 180; // 3s
+export const PULSE_STUN_TICKS = 120; // 2s
+export const PULSE_PUSH_TICKS = 15;
+export const PULSE_CENTER_Y_OFFSET = 0.8;
 
+export const INVULN_TICKS = 90; // 1.5s
+export const FALL_Y_THRESHOLD = -10;
+export const FALL_RESPAWN_TICKS = 60;
+
+export const MOTE_HEIGHT_TOLERANCE = 1.5;
 export const INITIAL_RANDOM_MOTES = 20;
-export const MIN_RANDOM_MOTES = 18;
-export const MOTE_SPAWN_INTERVAL_TICKS = 180;
+export const MAX_ACTIVE_MOTES = 30;
+export const MOTE_SPAWN_INTERVAL_TICKS = 240;
+export const DROPPED_MOTE_TTL_TICKS = 480;
 
-export const INITIAL_RANDOM_SHADES = 1;
-export const MAX_RANDOM_SHADES = 4;
-export const SHADE_SPAWN_INTERVAL_TICKS = 900;
+export const SHADE_DEFAULT_Y = 1.0;
+export const SHADE_DETECT_RADIUS = 12;
+export const SHADE_LOSE_RADIUS = 18;
+export const SHADE_HEIGHT_TOLERANCE = 1.5;
+export const SHADE_SPAWN_FIRST_TICK = 300;
+export const SHADE_SPAWNING_TICKS = 60;
+export const SHADE_RECOIL_DIST = 2.0;
+export const SHADE_RECOIL_TICKS = 60;
+export const SAFE_PUSH_MAX_TICKS = 30;
+export const SHADE_SPEED_NIGHT3 = 4.5;
+
+export const DRIFTER_SPEED_IDLE = 2.0;
+export const DRIFTER_SPEED_ACTIVE = 7.0;
+export const DRIFTER_DETECT_RADIUS = 15.0;
+export const DRIFTER_MIN_CARRIED = 5;
+export const DRIFTER_STEAL_RADIUS = 1.2;
+export const DRIFTER_STEAL_MAX = 3;
+export const DRIFTER_FLEE_TICKS = 240;
+export const DRIFTER_DROP_FLEE_TICKS = 120;
+export const DRIFTER_SPAWN_INTERVAL_TICKS = 1200;
+export const DRIFTER_MAX_COUNT = 2;
+
+export const CHARM_DURATION_TICKS = 600;
+export const CHARM_SPEED = 7.2;
+export const CHARM_RESPAWN_TICKS = 2700;
+
+export const WIND_INTERVAL_TICKS = 1800; // 30s
+export const WIND_DURATION_TICKS = 300; // 5s
+export const WIND_WARN_TICKS = 120; // 2s warning
+export const WIND_PUSH_SPEED = 2.0; // m/s
 
 export const TUNING = {
   player_speed: 6,
-  carry_capacity: 5,
-  lantern_cost: 3,
+  carry_capacity: 10,
+  lantern_cost: 10,
   lantern_count_night1: 5,
-  pickup_radius: 1.5,
-  interact_radius: 2.5,
-  pulse_cost: 1,
-  pulse_radius: 7,
-  night1_duration_s: 180,
+  pickup_radius: 1,
+  interact_radius: 2,
+  pulse_cost: 3,
+  pulse_radius: 5,
+  night1_duration_s: 300,
+  night2_duration_s: 330,
+  night3_duration_s: 360,
   flames: 3,
   invuln_s: 1.5,
   hit_drop_ratio: 0.5,
-  pulse_stun_s: 3,
+  pulse_stun_s: 2,
   pulse_push_m: 4,
-  pulse_cooldown_s: 2,
+  pulse_cooldown_s: 3,
   safe_radius: 6,
-  shade_speed: 3.6,
-  shade_hit_radius: 1.2,
-  fall_enabled: false,
+  shade_speed: 4,
+  shade_hit_radius: 1,
+  fall_enabled: true,
+  dash_speed: 14,
+  dash_duration_s: 0.2,
+  dash_cooldown_s: 1.5,
   score: {
     per_mote: 10,
-    per_lantern: 200,
-    per_stun: 25,
-    per_second_left: 5,
-    per_flame_left: 100,
+    per_lantern: 100,
+    per_stun: 5,
+    per_second_left: 2,
+    per_flame_left: 50,
   },
 } as const;
-
-export interface DefaultLanternDef {
-  id: string;
-  pos: Vec3;
-}
-
-export function getDefaultNight1Lanterns(): DefaultLanternDef[] {
-  const count = TUNING.lantern_count_night1;
-  const defs: DefaultLanternDef[] = [];
-  for (let i = 0; i < count; i++) {
-    const angle = (i * 2 * Math.PI) / count;
-    const x = round3(Math.sin(angle) * LANTERN_RING_RADIUS);
-    const z = round3(Math.cos(angle) * LANTERN_RING_RADIUS);
-    defs.push({ id: `L${i + 1}`, pos: [x, 0, z] });
-  }
-  return defs;
-}
