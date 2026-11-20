@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.env.*
+*.log
+.ag_buf.txt
+.playwright-mcp/
+tmp/

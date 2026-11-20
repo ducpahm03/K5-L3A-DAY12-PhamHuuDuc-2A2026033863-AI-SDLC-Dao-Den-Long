@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+set -e
+
+echo "[pre-commit] Running Dao Den Long verification gate..."
+if [ -f "scripts/verify-all.mjs" ] && [ -d "node_modules" ]; then
+  npm run verify
+else
+  echo "[pre-commit] Skipping verify-all before dependencies/scripts are initialized."
+fi
