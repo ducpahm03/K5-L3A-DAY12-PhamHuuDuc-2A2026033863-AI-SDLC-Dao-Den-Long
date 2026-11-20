@@ -1,0 +1,7 @@
+Command: node dist/headless.mjs --seed 1337 --night 3 --ticks 18000 --snapshot-every 600 --out <file>
+Elapsed (18,000 ticks): 157.7 ms
+Run A bytes           : 57508
+Run B bytes           : 57508
+Run A SHA256          : 550d3562509b66a1275a2a6082e152258dae4ad3e2fec72f3e261ff375eeb241
+Run B SHA256          : 550d3562509b66a1275a2a6082e152258dae4ad3e2fec72f3e261ff375eeb241
+Identical             : true
