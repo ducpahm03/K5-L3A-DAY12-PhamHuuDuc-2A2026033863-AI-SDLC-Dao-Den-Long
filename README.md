@@ -1,9 +1,14 @@
-# Đảo Đèn Lồng — Day 12 AI SDLC Lab
+# Đảo Đèn Lồng — Day 12 AI SDLC Lab (Release v1.0.0)
 
-> **Học viên:** Phạm Hữu Đức (`2A2026033863`) · **Lớp:** K5-L3A · **Phase hiện tại:** `phase-1` (PRD-0 · Test Contract v1.0)
-> **Bằng chứng kiểm chứng Phase 1:** [docs/proof/phase-1/PROOF.md](docs/proof/phase-1/PROOF.md) · **Giả định & SDLC:** [docs/notes/phase-1-assumptions.md](docs/notes/phase-1-assumptions.md)
+> **Học viên:** Phạm Hữu Đức (`2A2026033863`) · **Lớp:** K5-L3A · **Phiên bản:** `v1.0.0` (Contract v1.3)  
+> **Tags:** `phase-1` → `phase-2` → `phase-3` → `phase-4`  
+> **Bằng chứng kiểm chứng:**
+> - Phase 1: [docs/proof/phase-1/PROOF.md](docs/proof/phase-1/PROOF.md)
+> - Phase 2: [docs/proof/phase-2/PROOF.md](docs/proof/phase-2/PROOF.md)
+> - Phase 3: [docs/proof/phase-3/PROOF.md](docs/proof/phase-3/PROOF.md)
+> - Phase 4: [docs/proof/phase-4/PROOF.md](docs/proof/phase-4/PROOF.md) · [docs/notes/phase-4-retro.md](docs/notes/phase-4-retro.md)
 
-**Đảo Đèn Lồng** là game 3D góc nhìn thứ ba xây bằng **TypeScript + Three.js (Vite)** kết hợp lõi mô phỏng thuần TypeScript chạy trên **Node.js** cho chế độ headless 60 tick/giây tất định (chạy mượt trên macOS, Linux và Windows).
+**Đảo Đèn Lồng** là game 3D sinh tồn phiêu lưu cổ tích góc nhìn thứ ba xây dựng bằng **TypeScript + Three.js (Vite)** kết hợp lõi mô phỏng thuần TypeScript chạy trên **Node.js** cho chế độ headless 60 tick/giây tất định 100%.
 
 ---
 
@@ -17,19 +22,52 @@ npm run build
 npm run start
 ```
 
-Mở trình duyệt tại `http://127.0.0.1:4173` để chơi **Đêm 1 – Đảo Bến**.
+Mở trình duyệt tại `http://127.0.0.1:4173` để trải nghiệm trọn vẹn 3 Đêm:
+- **Đêm 1 · Đảo Bến** (yên ả mở màn)
+- **Đêm 2 · Đảo Cau** (gió giật định kỳ, bùa cản gió)
+- **Đêm 3 · Đảo Chuông** (chuông đồng choáng diện rộng, đệm nhảy, Bóng Mực 4.5 m/s)
 
-## Kiểm thử & Chế độ Headless (Test Contract v1.0)
+---
+
+## Kiểm thử & Chế độ Headless (Test Contract v1.3)
 
 ```bash
-# Chạy toàn bộ cổng kiểm chứng (sync-check, typecheck, build, 12 unit/contract tests, kiểm tra tất định 2 lần)
+# Chạy toàn bộ cổng kiểm chứng tự động (sync-check, typecheck, build, 11 tests)
 npm run verify
 
-# Chạy trực tiếp CLI headless (không cần cửa sổ/GPU)
+# Chạy kiểm thử vitest
+npm test
+
+# Chạy trực tiếp CLI headless (tất định, không cần GPU)
 node dist/headless.mjs --seed 42 --night 1 --ticks 1800 --snapshot-every 10 --out out.jsonl
+
+# Xuất bảng xếp hạng cục bộ
+node dist/headless.mjs --export-leaderboard leaderboard.json
 ```
 
-Khai báo contract tại gốc repo: [`game.contract.json`](game.contract.json).
+---
+
+## Benchmark & Soak Test (Ticket-04)
+
+```bash
+# 1. Đo hiệu năng 3D Benchmark (200 Bóng Mực, 100 đom đóm, 3 đèn sáng, camera bay tròn 30s)
+npm run bench -- --seed 42 --duration 30 --out bench.json
+# Kết quả thực tế: 262.5 FPS (ngưỡng ≥ 60 FPS), 1% low 229.2 FPS, tải 8 ms (≤ 10,000 ms)
+
+# 2. Soak Test 10 Đêm liên tục trong một tiến trình (kiểm tra ổn định bộ nhớ và rò rỉ)
+npm run soak -- --seed 7 --nights 10 --out soak.json
+# Kết quả thực tế: 0 crashes, mem_end 54.1 MB ≤ 1.2 x mem_start 46.3 MB
+```
+
+---
+
+## Bảng Xếp Hạng & Tiếp Cận (Accessibility)
+- **Bảng xếp hạng cục bộ:** Lưu top 10 điểm cao nhất, lưu theo tên (3–12 ký tự), số đêm thắng, thời điểm đạt ISO 8601 kèm múi giờ.
+- **Tiếp cận người chơi:**
+  - **Bảng màu mù màu (Colorblind mode):** Phân biệt rõ Bóng Mực (`#00B3FF`) và cảnh báo (`#FFFFFF`).
+  - **Cỡ chữ lớn (Large text):** 1.25x scaling, phông chuẩn ≥ 18px ở 1280×720.
+  - **Giảm chuyển động (Reduced Motion):** Tắt rung lắc camera và hiệu ứng chớp sáng mạnh.
+  - **Mũi tên định hướng:** Chỉ báo mép màn hình trỏ về đèn chưa thắp hoặc đèn cạn dầu gần nhất.
 
 ---
 
@@ -37,48 +75,20 @@ Khai báo contract tại gốc repo: [`game.contract.json`](game.contract.json).
 
 | Phím / Thao tác | Hành động |
 |---|---|
-| `W A S D` (hoặc `↑ ↓`) | Di chuyển Mây theo hướng camera 3D |
-| `Space` | Nhảy |
-| `E` | Nạp đom đóm vào Đèn Lồng Lớn gần nhất (trong `2.5m`) |
-| `F` / `Q` / `Chuột phải` | **Tỏa Sáng (`pulse`)** — tốn 1 đom đóm, đẩy lùi `4m` & làm choáng Bóng Mực `3s` trong `7m` |
-| `Kéo chuột trái` hoặc `← →` | Xoay camera 3D quanh Mây (có nút **Khóa chuột / Pointer Lock** tùy chọn trên HUD) |
+| `W A S D` (hoặc `↑ ↓`) | Di chuyển Mây theo hướng camera 3D (tốc độ chuẩn 6.0 m/s) |
+| `Space` | Nhảy (vận tốc 7.0 m/s, trọng lực −20 m/s²) |
+| `Shift` | **Lướt (Dash)** — tốc độ 14 m/s trong 0.2s, hồi chiêu 1.5s |
+| `E` | Nạp đom đóm / Châm dầu vào Đèn Lồng gần nhất |
+| `F` / `Chuột phải` | **Tỏa Sáng (`pulse`)** — tốn 3 đom đóm, đẩy lùi 4m & làm choáng Bóng Mực 2s trong bán kính 5m |
+| `Esc` / `P` | Tạm dừng trò chơi |
+| `Kéo chuột trái` | Xoay camera tự do quanh Mây |
 
 ---
 
-## Cách tính điểm & Thông số chính (`game.contract.json`)
+## Cấu trúc thư mục
 
-| Sự kiện / Luật | Giá trị |
-|---|---:|
-| Nhặt 1 đom đóm (`per_mote`, tối đa mang `5`) | `+10` |
-| Thắp sáng 1 Đèn Lồng Lớn (`per_lantern`, cần `3` đom đóm/đèn) | `+200` |
-| Làm choáng 1 Bóng Mực bằng Tỏa Sáng (`per_stun`, hồi chiêu `2s`) | `+25` |
-| Thưởng thời gian còn lại khi thắng (`per_second_left`, `floor(time_left_s)`) | `+5 / giây` |
-| Thưởng ngọn lửa còn lại khi thắng (`per_flame_left`, khởi đầu `3` lửa) | `+100 / lửa` |
-| Bị Bóng Mực chạm | Mất `1` lửa, rơi `floor(carried * 0.5)` đom đóm, bất tử `1.5s` |
-| Rơi khỏi đảo (`fall_enabled`) | `false` — Đảo Bến (`R = 35m`) có rào đá & biển mây mềm bao quanh |
-
----
-
-## Sáng tạo của tôi (không làm lệch Test Contract)
-
-Toàn bộ phần sáng tạo nằm hoàn toàn trong tầng hiển thị và âm thanh (`src/game/`), **không chạm tới lõi mô phỏng `src/core/`** và **tự động tắt hoàn toàn khi chạy headless**:
-
-1. **Mỹ thuật 3D Cổ Tích Procedural (100% mã nguồn, 0 asset ngoài):** Mây mặc áo choàng bay theo vận tốc, đội **nón lá** có **đèn lồng nhỏ treo đung đưa** tỏa ánh sáng điểm cùng các đom đóm đã nhặt bay xoay quanh; 5 Đèn Lồng Lớn mái đình hiện cột sáng và vòng an toàn `safe_radius = 6m` khi thắp; Đảo Bến có cầu gỗ vươn ra biển mây trôi, trăng sao và đèn trời bay xa.
-2. **Thế giới biến chuyển theo tiến độ (0/5 → 5/5 đèn):** Bầu trời gradient shader và sương mù chuyển mượt từ tím đêm sâu sang ánh bình minh ấm áp theo từng ngọn đèn được thắp.
-3. **Luồng gió đom đóm dẫn đường & Mini-la bàn:** Dải hạt sáng uốn lượn nhẹ từ Mây về phía đèn chưa thắp gần nhất giúp định hướng tự nhiên trong sương đêm.
-4. **Âm thanh WebAudio Ngũ Cung Procedural:** Nhạc nền thang âm ngũ cung tự tổng hợp, mở thêm hòa âm theo số đèn đã thắp kèm hiệu ứng chuông gió, chuông đồng, sóng xung kích Tỏa Sáng (có nút tắt/bật trên HUD).
-
-- **Bằng chứng không phá Contract:** `src/core/` không import `three` hay WebAudio; chạy `npm run verify` xác nhận 12/12 test xanh và 2 lần chạy headless (`--seed 1337`, 1800 ticks) cho SHA-256 trùng khớp tuyệt đối ([determinism.txt](docs/proof/phase-1/determinism.txt)).
-
----
-
-## Cấu trúc dự án & Tài liệu SDLC
-
-- `src/core/` — Lõi mô phỏng thuần TS 60Hz (dùng chung cho 3D và headless)
-- `src/headless/` — CLI tuân thủ Test Contract v1.0 → `dist/headless.mjs`
-- `src/game/` — Trình diễn 3D Three.js, VFX, WebAudio, HUD & điều khiển
-- `tests/` — Unit tests, contract integration tests & scenario fixtures
-- `AGENTS.md`, `.agents/skills/verify-phase/`, `.githooks/pre-commit`, `.github/workflows/ci.yml` — Harness AI & tự động hóa kiểm chứng
-- `docs/notes/` — Giả định ([phase-1-assumptions.md](docs/notes/phase-1-assumptions.md)), Nhật ký AI & token ([ai-log.md](docs/notes/ai-log.md)), Đánh giá ([phase-1-eval.md](docs/notes/phase-1-eval.md))
-- `docs/proof/phase-1/` — Bảng truy vết, JSONL thật, hash tất định và ảnh chụp 3D ([PROOF.md](docs/proof/phase-1/PROOF.md))
-- Tài liệu gốc của lab: [GUIDE.md](GUIDE.md) · [CHECKPOINTS.md](CHECKPOINTS.md) · [SUBMISSION.md](SUBMISSION.md) · [RULES.md](RULES.md) · [RUBRIC.md](RUBRIC.md) · [CREDITS.md](CREDITS.md)
+- `src/core/` — Lõi mô phỏng tất định 60Hz (zero external/DOM dependencies)
+- `src/headless/` — CLI contract v1.3, benchmark, soak test & export leaderboard
+- `src/game/` — Three.js 3D client, VFX shader, WebAudio ngũ cung & HUD
+- `docs/proof/` — Toàn bộ bằng chứng Phase 1, 2, 3, 4 (ảnh chụp, JSONL, hash, bench.json, soak.json)
+- `docs/notes/` — ADR-001 kiến trúc châm dầu, nhật ký AI & hồi tưởng kết thúc dự án

@@ -88,6 +88,7 @@ export class InputTimeline {
 }
 
 export class Simulation {
+  public readonly seed: number;
   public readonly night: NightNumber;
   public readonly map: MapConfig;
   public tick = 0;
@@ -117,6 +118,7 @@ export class Simulation {
   private prevInput: ResolvedInput = createDefaultInput();
 
   constructor(seed: number, night: NightNumber = 1, scenario?: ScenarioSpec) {
+    this.seed = seed;
     this.night = night;
     this.map = getMapConfig(night);
     this.rng = new SeededRng(seed);

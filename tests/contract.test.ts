@@ -113,4 +113,16 @@ describe('Headless CLI — Test Contract v1.2 (Phase 3 + Phase 1–2 Regression)
     expect(res.status).toBe(2);
     expect(res.stderr.length).toBeGreaterThan(0);
   });
+
+  it('validates Contract v1.3 requirements: bench_cmd, soak_cmd, and --export-leaderboard', () => {
+    const contract = JSON.parse(readFileSync(resolve(root, 'game.contract.json'), 'utf8'));
+    expect(contract.contract_version).toBe('1.3');
+    expect(contract.bench_cmd).toBe('node dist/bench.mjs');
+    expect(contract.soak_cmd).toBe('node dist/soak.mjs');
+
+    const lbOut = resolve(tmpDir, 'test-leaderboard.json');
+    const res = runHeadless(['--export-leaderboard', lbOut]);
+    expect(res.status).toBe(0);
+    expect(readFileSync(lbOut, 'utf8')).toBeTruthy();
+  });
 });

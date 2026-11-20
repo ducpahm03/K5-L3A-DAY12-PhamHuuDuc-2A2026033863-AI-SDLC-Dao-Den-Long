@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getLocalIsoString, sortLeaderboard, validatePlayerName, type LeaderboardEntry } from '../core/leaderboard.js';
 import { distXZ, round1 } from '../core/rng.js';
 import type { Simulation } from '../core/simulation.js';
 import { FUEL_LOW_THRESHOLD_UNITS, FUEL_MAX_UNITS, FUEL_UNIT_SCALE, TICK_RATE, TUNING } from '../core/tuning.js';
@@ -8,9 +9,12 @@ export interface UserSettings {
   volume: number;
   sensitivity: number;
   colorblind: boolean;
+  largeText: boolean;
+  reducedMotion: boolean;
 }
 
-const SETTINGS_KEY = 'dao_den_long_settings_v2';
+const SETTINGS_KEY = 'dao_den_long_settings_v3';
+export const LEADERBOARD_WEB_KEY = 'dao_den_long_leaderboard';
 
 export function loadSettings(): UserSettings {
   try {
@@ -21,12 +25,14 @@ export function loadSettings(): UserSettings {
         volume: typeof parsed.volume === 'number' ? Math.max(0, Math.min(100, parsed.volume)) : 70,
         sensitivity: typeof parsed.sensitivity === 'number' ? Math.max(0.3, Math.min(2.5, parsed.sensitivity)) : 1.0,
         colorblind: Boolean(parsed.colorblind),
+        largeText: Boolean(parsed.largeText),
+        reducedMotion: Boolean(parsed.reducedMotion),
       };
     }
   } catch {
     // Ignore storage restriction
   }
-  return { volume: 70, sensitivity: 1.0, colorblind: false };
+  return { volume: 70, sensitivity: 1.0, colorblind: false, largeText: false, reducedMotion: false };
 }
 
 export function saveSettings(s: UserSettings): void {
@@ -68,10 +74,20 @@ export class HudController {
   private readonly sensInput = document.getElementById('input-sens') as HTMLInputElement;
   private readonly sensLabel = document.getElementById('label-sens')!;
   private readonly cbInput = document.getElementById('input-colorblind') as HTMLInputElement;
+  private readonly largeTextInput = document.getElementById('input-large-text') as HTMLInputElement;
+  private readonly reducedMotionInput = document.getElementById('input-reduced-motion') as HTMLInputElement;
+  private readonly leaderboardEl = document.getElementById('overlay-leaderboard')!;
+  private readonly leaderboardTbody = document.getElementById('leaderboard-tbody')!;
+  private readonly playerNameInput = document.getElementById('input-player-name') as HTMLInputElement;
+  private readonly saveScoreBtn = document.getElementById('btn-save-score') as HTMLButtonElement;
+  private readonly saveScoreStatus = document.getElementById('save-score-status')!;
   private readonly projVec = new THREE.Vector3();
 
   private settingsReturnTo: 'menu' | 'pause' = 'menu';
   private colorblind = false;
+  private lastCompletedScore = 0;
+  private lastNightsWon = 0;
+  private lastSeed = 42;
 
   constructor(callbacks: {
     settings: UserSettings;
@@ -103,33 +119,141 @@ export class HudController {
     document.getElementById('btn-pause-settings')!.addEventListener('click', () => this.openSettings('pause'));
     document.getElementById('btn-settings-close')!.addEventListener('click', () => this.closeSettings());
 
+    document.getElementById('btn-menu-leaderboard')?.addEventListener('click', () => this.showLeaderboard('menu'));
+    document.getElementById('btn-end-leaderboard')?.addEventListener('click', () => this.showLeaderboard('end'));
+    document.getElementById('btn-leaderboard-close')?.addEventListener('click', () => this.closeLeaderboard());
+
+    this.saveScoreBtn?.addEventListener('click', () => this.handleSaveScore());
+    this.playerNameInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.handleSaveScore();
+    });
+
     this.volInput.value = String(Math.round(callbacks.settings.volume));
     this.volLabel.textContent = `${Math.round(callbacks.settings.volume)}%`;
     this.sensInput.value = String(Math.round(callbacks.settings.sensitivity * 100));
     this.sensLabel.textContent = `${callbacks.settings.sensitivity.toFixed(1)}x`;
     this.cbInput.checked = callbacks.settings.colorblind;
+    this.largeTextInput.checked = callbacks.settings.largeText;
+    this.reducedMotionInput.checked = callbacks.settings.reducedMotion;
+
     this.applyColorblind(callbacks.settings.colorblind);
+    this.applyLargeText(callbacks.settings.largeText);
+    this.applyReducedMotion(callbacks.settings.reducedMotion);
 
     const emitSettings = () => {
       const s: UserSettings = {
         volume: Number(this.volInput.value),
         sensitivity: Number(this.sensInput.value) / 100,
         colorblind: this.cbInput.checked,
+        largeText: this.largeTextInput.checked,
+        reducedMotion: this.reducedMotionInput.checked,
       };
       this.volLabel.textContent = `${Math.round(s.volume)}%`;
       this.sensLabel.textContent = `${s.sensitivity.toFixed(1)}x`;
       this.applyColorblind(s.colorblind);
+      this.applyLargeText(s.largeText);
+      this.applyReducedMotion(s.reducedMotion);
       saveSettings(s);
       callbacks.onSettingsChange(s);
     };
     this.volInput.addEventListener('input', emitSettings);
     this.sensInput.addEventListener('input', emitSettings);
     this.cbInput.addEventListener('change', emitSettings);
+    this.largeTextInput.addEventListener('change', emitSettings);
+    this.reducedMotionInput.addEventListener('change', emitSettings);
   }
 
   private applyColorblind(cb: boolean): void {
     this.colorblind = cb;
     document.body.classList.toggle('colorblind', cb);
+  }
+
+  private applyLargeText(large: boolean): void {
+    document.body.classList.toggle('large-text', large);
+  }
+
+  private applyReducedMotion(rm: boolean): void {
+    document.body.classList.toggle('reduced-motion', rm);
+  }
+
+  private leaderboardReturnTo: 'menu' | 'end' = 'menu';
+
+  showLeaderboard(from: 'menu' | 'end'): void {
+    this.leaderboardReturnTo = from;
+    this.menuEl.classList.add('hidden');
+    this.endEl.classList.add('hidden');
+    this.renderLeaderboard();
+    this.leaderboardEl.classList.remove('hidden');
+  }
+
+  closeLeaderboard(): void {
+    this.leaderboardEl.classList.add('hidden');
+    if (this.leaderboardReturnTo === 'menu') this.menuEl.classList.remove('hidden');
+    else this.endEl.classList.remove('hidden');
+  }
+
+  private getStoredLeaderboard(): LeaderboardEntry[] {
+    try {
+      const raw = localStorage.getItem(LEADERBOARD_WEB_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return sortLeaderboard(parsed);
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  }
+
+  private saveStoredLeaderboard(entries: LeaderboardEntry[]): void {
+    try {
+      localStorage.setItem(LEADERBOARD_WEB_KEY, JSON.stringify(sortLeaderboard(entries)));
+    } catch {
+      // ignore
+    }
+  }
+
+  private renderLeaderboard(): void {
+    const entries = this.getStoredLeaderboard();
+    if (entries.length === 0) {
+      this.leaderboardTbody.innerHTML = '<tr><td colspan="5" style="text-align:center; opacity:0.7;">Chưa có kỷ lục nào. Hãy chơi và lưu điểm!</td></tr>';
+      return;
+    }
+    this.leaderboardTbody.innerHTML = entries
+      .map(
+        (e, i) => `
+        <tr>
+          <td>#${i + 1}</td>
+          <td><strong>${e.name}</strong></td>
+          <td style="color:var(--brand-gold, #ffb347);">${e.score}</td>
+          <td>${e.nights_won} / 3</td>
+          <td style="font-size:0.85em; opacity:0.8;">${e.achieved_at.replace('T', ' ').slice(0, 19)}</td>
+        </tr>
+      `,
+      )
+      .join('');
+  }
+
+  private handleSaveScore(): void {
+    const rawName = this.playerNameInput.value.trim();
+    if (!validatePlayerName(rawName)) {
+      this.saveScoreStatus.textContent = 'Tên không hợp lệ (cần 3–12 ký tự chữ/số/gạch dưới).';
+      this.saveScoreStatus.style.color = '#ff6b6b';
+      return;
+    }
+    const newEntry: LeaderboardEntry = {
+      name: rawName,
+      score: this.lastCompletedScore,
+      nights_won: this.lastNightsWon,
+      achieved_at: getLocalIsoString(),
+      seed: this.lastSeed,
+    };
+    const current = this.getStoredLeaderboard();
+    this.saveStoredLeaderboard([...current, newEntry]);
+    this.saveScoreStatus.textContent = `Đã lưu kỷ lục của ${rawName}!`;
+    this.saveScoreStatus.style.color = '#74c0fc';
+    this.saveScoreBtn.disabled = true;
+    this.playerNameInput.disabled = true;
   }
 
   private hideAll(): void {
@@ -211,6 +335,19 @@ export class HudController {
       <div class="end-stat-box"><div class="val">${campaignTotal}</div><div class="lbl">Tổng điểm</div></div>
       <div class="end-stat-box"><div class="val">${litCount}/${sim.lanterns.length}</div><div class="lbl">Đèn giữ sáng</div></div>
     `;
+
+    // Leaderboard state recording for Ticket-04
+    this.lastCompletedScore = campaignTotal > 0 ? campaignTotal : sim.score;
+    this.lastNightsWon = sim.state === 'won' ? sim.night : Math.max(0, sim.night - 1);
+    this.lastSeed = sim.seed;
+    if (this.saveScoreBtn) this.saveScoreBtn.disabled = false;
+    if (this.playerNameInput) {
+      this.playerNameInput.disabled = false;
+      this.playerNameInput.value = '';
+    }
+    if (this.saveScoreStatus) {
+      this.saveScoreStatus.textContent = '';
+    }
   }
 
   update(sim: Simulation, camera: THREE.PerspectiveCamera): void {

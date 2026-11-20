@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { readLeaderboardNode, saveLeaderboardNode } from './leaderboard-node.js';
 import { getMapConfig } from '../core/maps.js';
 import { InputTimeline, Simulation } from '../core/simulation.js';
 import type { InputFrame, JsonlRecord, NightNumber, ScenarioSpec } from '../core/types.js';
@@ -13,6 +14,7 @@ interface CliArgs {
   ticks: number;
   outPath: string;
   snapshotEvery: number;
+  exportLeaderboard?: string;
 }
 
 function parseIntArg(flag: string, value: string | undefined): number {
@@ -34,10 +36,15 @@ function parseArgs(argv: string[]): CliArgs {
   let ticks: number | undefined;
   let outPath: string | undefined;
   let snapshotEvery = 10;
+  let exportLeaderboard: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     switch (arg) {
+      case '--export-leaderboard':
+        exportLeaderboard = argv[++i];
+        if (!exportLeaderboard) throw new Error('Missing path for --export-leaderboard');
+        break;
       case '--seed':
         seed = parseIntArg('--seed', argv[++i]);
         break;
@@ -65,6 +72,19 @@ function parseArgs(argv: string[]): CliArgs {
       default:
         throw new Error(`Unknown argument: ${arg}`);
     }
+  }
+
+  if (exportLeaderboard) {
+    return {
+      seed: seed ?? 0,
+      night: (night as NightNumber) ?? 1,
+      scenarioPath,
+      inputsPath,
+      ticks: ticks ?? 0,
+      outPath: outPath ?? '',
+      snapshotEvery,
+      exportLeaderboard,
+    };
   }
 
   if (seed === undefined) throw new Error('Missing required flag --seed');
@@ -95,6 +115,13 @@ function readJsonFile(path: string, label: string): unknown {
 function main(): void {
   try {
     const args = parseArgs(process.argv.slice(2));
+
+    if (args.exportLeaderboard) {
+      const entries = readLeaderboardNode();
+      saveLeaderboardNode(entries, args.exportLeaderboard);
+      process.exit(0);
+    }
+
     const mapCfg = getMapConfig(args.night);
     const validLanternIds = new Set(mapCfg.lanterns.map((l) => l.id));
 

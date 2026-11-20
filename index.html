@@ -62,7 +62,7 @@
       <!-- Main Menu Overlay -->
       <div id="overlay-menu" class="overlay">
         <div class="overlay-card">
-          <div class="eyebrow">Day 12 · AI SDLC · Phase 2 · Contract v1.1</div>
+          <div class="eyebrow">Day 12 · AI SDLC · Phase 4 · Release v1.0.0 · Contract v1.3</div>
           <h1>Đảo Đèn Lồng</h1>
           <p class="subtitle">Hành Trình Ba Hòn Đảo</p>
           <p class="lore">
@@ -79,6 +79,7 @@
           </div>
           <div class="btn-row">
             <button id="btn-play-campaign" class="primary-btn">Bắt Đầu Hành Trình (Đêm 1)</button>
+            <button id="btn-menu-leaderboard" class="secondary-btn">Bảng Xếp Hạng</button>
             <button id="btn-menu-settings" class="secondary-btn">Cài Đặt</button>
           </div>
           <div class="night-select-row">
@@ -117,7 +118,7 @@
       <div id="overlay-settings" class="overlay hidden">
         <div class="overlay-card narrow-card">
           <div class="eyebrow">Tùy Chỉnh (Tự Động Lưu)</div>
-          <h2>Cài Đặt</h2>
+          <h2>Cài Đặt & Tiếp Cận</h2>
           <div class="setting-group">
             <label for="input-volume">Âm lượng: <strong id="label-volume">70%</strong></label>
             <input id="input-volume" type="range" min="0" max="100" value="70" />
@@ -132,7 +133,44 @@
               Bảng màu dễ phân biệt (Mù màu: Bóng Mực #00B3FF, Cảnh báo ⚠ #FFFFFF)
             </label>
           </div>
+          <div class="setting-group checkbox-row">
+            <label for="input-large-text">
+              <input id="input-large-text" type="checkbox" />
+              Cỡ chữ lớn (1.25x scaling, font chuẩn ≥ 18px)
+            </label>
+          </div>
+          <div class="setting-group checkbox-row">
+            <label for="input-reduced-motion">
+              <input id="input-reduced-motion" type="checkbox" />
+              Giảm rung lắc / chớp giật màn hình (Reduced Motion)
+            </label>
+          </div>
           <button id="btn-settings-close" class="primary-btn">Đóng & Lưu</button>
+        </div>
+      </div>
+
+      <!-- Leaderboard Overlay -->
+      <div id="overlay-leaderboard" class="overlay hidden">
+        <div class="overlay-card">
+          <div class="eyebrow">Bảng Vàng Danh Dự</div>
+          <h2>Top 10 Thắp Sáng Quần Đảo</h2>
+          <div class="leaderboard-table-wrap">
+            <table class="leaderboard-table">
+              <thead>
+                <tr>
+                  <th>Hạng</th>
+                  <th>Tên</th>
+                  <th>Điểm</th>
+                  <th>Đêm Thắng</th>
+                  <th>Thời Điểm</th>
+                </tr>
+              </thead>
+              <tbody id="leaderboard-tbody"></tbody>
+            </table>
+          </div>
+          <div class="btn-row">
+            <button id="btn-leaderboard-close" class="primary-btn">Quay Lại</button>
+          </div>
         </div>
       </div>
 
@@ -143,8 +181,17 @@
           <h2 id="end-title">Đảo Đã Sáng!</h2>
           <p id="end-desc" class="lore"></p>
           <div id="end-stats" class="end-stats"></div>
+          <div id="end-leaderboard-form" class="leaderboard-form">
+            <label for="input-player-name">Lưu điểm vào Bảng Xếp Hạng (3–12 ký tự):</label>
+            <div class="input-action-row">
+              <input id="input-player-name" type="text" maxlength="12" placeholder="Tên người chơi" />
+              <button id="btn-save-score" class="secondary-btn">Lưu Điểm</button>
+            </div>
+            <div id="save-score-status" class="status-msg"></div>
+          </div>
           <div class="btn-row">
             <button id="btn-end-primary" class="primary-btn">Tiếp Tục</button>
+            <button id="btn-end-leaderboard" class="secondary-btn">Xem Bảng Xếp Hạng</button>
             <button id="btn-end-menu" class="secondary-btn">Về Menu</button>
           </div>
         </div>

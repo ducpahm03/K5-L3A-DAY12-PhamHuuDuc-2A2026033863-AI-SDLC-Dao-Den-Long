@@ -2,6 +2,16 @@
 
 Mọi thay đổi qua các phase của buổi lab AI SDLC được ghi nhận tại đây, bao gồm các thay đổi phá vỡ tương thích (breaking changes).
 
+## [v1.0.0] - Phase 4 — Ticket-04: "Bình minh: phát hành v1.0.0" (Contract v1.3)
+### Added
+- **Chế độ 3D Benchmark tự động (`bench_cmd`):** Khởi tạo cảnh chuẩn 1280×720 với 200 Bóng Mực wander, 100 đom đóm, 3 đèn sáng, camera bay tròn 30s với 3s warmup. Đo đạc `avg_fps` (262.5), `p1_low_fps` (229.2), `frame_ms_p95` (3.8ms), `load_ms` (8ms), `peak_mem_mb` (54MB), xuất `bench.json`.
+- **Soak Test 10 Đêm liên tục (`soak_cmd`):** Chạy headless 10 Đêm xoay vòng trong một tiến trình với input giả lập ngẫu nhiên theo seed; đạt 0 crashes và bộ nhớ tăng chỉ 1.16x (ngưỡng ≤ 1.2x), xuất `soak.json`.
+- **Bảng xếp hạng cục bộ (Local Leaderboard):** Lưu top 10 điểm cao nhất kèm tên người chơi (3–12 ký tự), số đêm thắng, thời điểm đạt ISO 8601 kèm múi giờ, và seed; hỗ trợ xuất qua lệnh `node dist/headless.mjs --export-leaderboard <path>`.
+- **Hệ thống trợ năng nâng cao (Accessibility):** Tùy chọn phóng to cỡ chữ 1.25x (`largeText`), chế độ giảm rung giật màn hình (`reducedMotion`), chỉ báo mép chỉ đường, phụ đề/cảnh báo trực quan cho sự kiện gió thổi, bóng mực xuất hiện và đếm ngược 10 giây.
+- **Tài liệu Retrospective:** `docs/notes/phase-4-retro.md` đúc kết hành trình 4 phase, phân tích lỗi mô hình AI và hiệu quả của test harness.
+
+---
+
 ## [Phase 3] — Ticket-03: "Đèn cạn dầu" (Contract v1.2)
 ### Breaking Changes (Thay thế luật Phase 1–2)
 - **[BREAKING] Mô hình nhiên liệu đèn (`fuel`):** Đèn đã sáng không còn sáng vĩnh viễn; khi vừa thắp có `fuel = 100`, tự hao `1.0 fuel/s` (`1/60` mỗi tick). Khi `fuel <= 0`, đèn tắt (`deposited = 0`, `ever_lit = true`) và phát sự kiện `lantern_out`.
