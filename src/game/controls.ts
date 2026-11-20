@@ -1,25 +1,26 @@
 import type { ResolvedInput } from '../core/types.js';
 
-/** Dual-mode controls: keyboard + drag-orbit or optional Pointer Lock. */
 export class InputController {
   public camYawDeg = 0;
   public camPitchRad = 0.44;
+  public sensitivity = 1.0;
 
   private readonly keys = new Set<string>();
   private dragging = false;
   private lastMouseX = 0;
   private lastMouseY = 0;
-  private pointerLocked = false;
+  private jumpQueued = false;
   private interactQueued = false;
   private pulseQueued = false;
-  private jumpQueued = false;
+  private dashQueued = false;
+  private pauseQueued = false;
 
   private readonly canvas: HTMLCanvasElement;
-  private readonly onPointerLockChange?: (locked: boolean) => void;
+  private readonly onPauseKey?: () => void;
 
-  constructor(canvas: HTMLCanvasElement, onPointerLockChange?: (locked: boolean) => void) {
+  constructor(canvas: HTMLCanvasElement, onPauseKey?: () => void) {
     this.canvas = canvas;
-    this.onPointerLockChange = onPointerLockChange;
+    this.onPauseKey = onPauseKey;
     this.bind();
   }
 
@@ -30,6 +31,11 @@ export class InputController {
       if (e.code === 'Space') this.jumpQueued = true;
       if (e.code === 'KeyE') this.interactQueued = true;
       if (e.code === 'KeyF' || e.code === 'KeyQ') this.pulseQueued = true;
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.dashQueued = true;
+      if (e.code === 'Escape' || e.code === 'KeyP') {
+        this.pauseQueued = true;
+        this.onPauseKey?.();
+      }
     });
 
     window.addEventListener('keyup', (e) => {
@@ -48,7 +54,7 @@ export class InputController {
         this.pulseQueued = true;
         return;
       }
-      if (e.button === 0 && !this.pointerLocked) {
+      if (e.button === 0) {
         this.dragging = true;
         this.lastMouseX = e.clientX;
         this.lastMouseY = e.clientY;
@@ -60,9 +66,10 @@ export class InputController {
     });
 
     window.addEventListener('mousemove', (e) => {
+      const locked = document.pointerLockElement === this.canvas;
       let dx = 0;
       let dy = 0;
-      if (this.pointerLocked) {
+      if (locked) {
         dx = e.movementX;
         dy = e.movementY;
       } else if (this.dragging) {
@@ -73,35 +80,16 @@ export class InputController {
       } else {
         return;
       }
-      this.camYawDeg = (this.camYawDeg - dx * 0.25 + 360) % 360;
-      this.camPitchRad = Math.max(0.18, Math.min(1.05, this.camPitchRad + dy * 0.004));
-    });
-
-    document.addEventListener('pointerlockchange', () => {
-      this.pointerLocked = document.pointerLockElement === this.canvas;
-      this.onPointerLockChange?.(this.pointerLocked);
+      this.camYawDeg = (this.camYawDeg - dx * 0.25 * this.sensitivity + 360) % 360;
+      this.camPitchRad = Math.max(0.18, Math.min(1.05, this.camPitchRad + dy * 0.004 * this.sensitivity));
     });
   }
 
-  togglePointerLock(): void {
-    if (document.pointerLockElement === this.canvas) {
-      document.exitPointerLock();
-    } else if (this.canvas.requestPointerLock) {
-      this.canvas.requestPointerLock();
-    }
-  }
-
-  isPointerLocked(): boolean {
-    return this.pointerLocked;
-  }
-
-  /** Step camera yaw with arrow keys and return contract-aligned input for one sim tick. */
   sampleForTick(dt: number): ResolvedInput {
-    const yawSpeed = 115; // deg/s
+    const yawSpeed = 115 * this.sensitivity;
     if (this.keys.has('ArrowLeft')) this.camYawDeg = (this.camYawDeg + yawSpeed * dt + 360) % 360;
     if (this.keys.has('ArrowRight')) this.camYawDeg = (this.camYawDeg - yawSpeed * dt + 360) % 360;
 
-    // Aligned with Test Contract v1.0 rotation: W -> +Z (forward), D -> -X (screen right when looking +Z)
     let mx = 0;
     let mz = 0;
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) mz += 1;
@@ -115,12 +103,15 @@ export class InputController {
       jump: this.jumpQueued || this.keys.has('Space'),
       interact: this.interactQueued || this.keys.has('KeyE'),
       pulse: this.pulseQueued || this.keys.has('KeyF'),
-      dash: false,
+      dash: this.dashQueued || this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
+      pause: this.pauseQueued,
     };
 
     this.jumpQueued = false;
     this.interactQueued = false;
     this.pulseQueued = false;
+    this.dashQueued = false;
+    this.pauseQueued = false;
     return input;
   }
 
@@ -131,5 +122,7 @@ export class InputController {
     this.jumpQueued = false;
     this.interactQueued = false;
     this.pulseQueued = false;
+    this.dashQueued = false;
+    this.pauseQueued = false;
   }
 }
